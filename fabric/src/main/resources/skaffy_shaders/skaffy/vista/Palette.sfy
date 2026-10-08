@@ -1,0 +1,73 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class Palette {
+    @Uniform float sunlight = 1.0;
+    @Uniform float skylight = 1.0;
+    @Uniform float torchlight = 1.0;
+    @Uniform float nightLight = 1.0;
+
+    float day() {
+        return smoothstep(-0.06, 0.2, sunDirection.y);
+    }
+
+    float horizon() {
+        return (1.0 - smoothstep(0.02, 0.5, max(sunDirection.y, 0.0))) * smoothstep(-0.22, -0.02, sunDirection.y);
+    }
+
+    float moonBrightness() {
+        return 0.25 + 0.75 * abs(float(moonPhase) - 4.0) / 4.0;
+    }
+
+    vec3 sunColor() {
+        float height = max(sunDirection.y, 0.0);
+        vec3 low = vec3(1.0, 0.46, 0.18);
+        vec3 high = vec3(1.0, 0.95, 0.88);
+        return mix(low, high, smoothstep(0.0, 0.42, height)) * 3.4 * sunlight;
+    }
+
+    vec3 moonColor() {
+        return vec3(0.5, 0.62, 1.0) * 0.1 * moonBrightness() * nightLight;
+    }
+
+    vec3 directLight() {
+        vec3 light = sunDirection.y > 0.0 ? sunColor() * smoothstep(0.0, 0.1, sunDirection.y) : moonColor() * smoothstep(0.0, 0.1, moonDirection.y);
+        return light * (1.0 - rain * 0.8) * (1.0 - thunder * 0.15);
+    }
+
+    vec3 zenith() {
+        vec3 color = mix(vec3(0.008, 0.013, 0.03) * nightLight, vec3(0.26, 0.48, 0.94), day());
+        return mix(color, vec3(luminance(color)) * vec3(0.9, 0.95, 1.0), rain * 0.75) * (1.0 - rain * 0.35);
+    }
+
+    vec3 horizonColor() {
+        vec3 color = mix(vec3(0.02, 0.03, 0.06) * nightLight, vec3(0.76, 0.82, 0.9), day());
+        color = mix(color, #FF8C52 * (0.4 + 0.6 * day()), horizon() * 0.2 * (1.0 - rain));
+        return mix(color, vec3(luminance(color)) * vec3(0.85, 0.9, 0.95), rain * 0.7) * (1.0 - rain * 0.35);
+    }
+
+    vec3 skyAmbient(vec3 normal) {
+        float up = normal.y * 0.5 + 0.5;
+        return mix(horizonColor() * 0.75, zenith() * 1.3, up) * 1.1 * skylight;
+    }
+
+    vec3 torchColor() {
+        return vec3(1.0, 0.6, 0.3) * 1.4 * torchlight;
+    }
+
+    float blockCurve(float level) {
+        return pow(level, 3.0) * 0.9 + pow(level, 8.0) * 0.6;
+    }
+
+    vec3 caveLight() {
+        return vec3(0.010, 0.012, 0.018);
+    }
+
+    vec3 dimensionAmbient() {
+        if (dimension == NETHER) {
+            return pow(fogColor.rgb, vec3(1.4)) * 0.9 + vec3(0.05, 0.02, 0.01);
+        }
+        return vec3(0.16, 0.12, 0.24);
+    }
+}

@@ -1,0 +1,39 @@
+{
+	"name": "sfy",
+	"displayName": "Skaffy's API .sfy",
+	"description": "Syntax coloring for .sfy GUI and shader files of Skaffy's API",
+	"version": "1.0.0",
+	"publisher": "skaffy",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/sskaffy/SkaffyAPI"
+	},
+	"engines": {
+		"vscode": "^1.60.0"
+	},
+	"categories": [
+		"Programming Languages"
+	],
+	"contributes": {
+		"languages": [
+			{
+				"id": "sfy",
+				"aliases": [
+					"SFY",
+					"sfy"
+				],
+				"extensions": [
+					".sfy"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "sfy",
+				"scopeName": "source.sfy",
+				"path": "./syntaxes/sfy.tmLanguage.json"
+			}
+		]
+	}
+}

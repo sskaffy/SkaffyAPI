@@ -1,0 +1,9 @@
+{
+	"skaffys-api.connect.downloading": "Downloading server content (%s / %s MiB)",
+	"skaffys-api.connect.loading": "Loading server content...",
+	"skaffys-api.options.vista": "Vista Shaders",
+	"skaffys-api.options.vista.tooltip": "Skaffy's API's own shader: soft shadows, colored light, reflections, clouds and more. Works in single player and on any server; servers can turn it on or off for you while you play there.",
+	"skaffys-api.options.shaderDistance": "Shader Distance",
+	"skaffys-api.options.shaderDistance.tooltip": "How far shadows, colored light and other shader effects reach, for Vista and servers' shaders. Lower is faster. Never further than your Render Distance.",
+	"skaffys-api.options.locked": "Locked by the server you're playing on"
+}

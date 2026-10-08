@@ -1,0 +1,27 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Waving {
+    @Blocks("#minecraft:leaves") const int LEAVES = 1;
+    @Blocks({"minecraft:short_grass", "minecraft:fern", "minecraft:short_dry_grass", "#minecraft:small_flowers", "#minecraft:crops",
+            "minecraft:sweet_berry_bush", "minecraft:dead_bush"}) const int PLANTS = 2;
+    @Blocks({"minecraft:water"}) const int WATER = 3;
+
+    @Uniform float wind = 1.0;
+
+    @Vertex(TERRAIN)
+    void wave(Vertex v) {
+        vec3 p = v.worldPos;
+        float t = time * (0.6 + wind);
+
+        if (v.material == LEAVES) {
+            v.position += vec3(sin(t * 1.7 + p.x * 0.6 + p.y), sin(t * 1.3 + p.z * 0.6) * 0.5, cos(t * 1.5 + p.z * 0.5 + p.y)) * 0.035 * wind;
+        } else if (v.material == PLANTS && v.top) {
+            float gust = 0.6 + 0.4 * noise(p.xz * 0.15 + time * 0.3);
+            v.position.xz += vec2(sin(t * 2.0 + p.x + p.z * 0.5), cos(t * 1.7 + p.z + p.x * 0.3)) * 0.12 * wind * gust;
+        } else if (v.material == WATER && v.top) {
+            v.position.y += (sin(t * 1.5 + p.x * 0.8) * cos(t * 1.1 + p.z * 0.7) - 1.0) * 0.04;
+        }
+    }
+}

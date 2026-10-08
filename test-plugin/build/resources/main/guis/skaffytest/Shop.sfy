@@ -1,0 +1,66 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class Shop {
+    record Offer(String id, String name, String item, int price) {}
+
+    int coins;
+    Text coinText;
+
+    @Gui
+    public void main(int startCoins, List<Offer> offers) {
+        coins = startCoins;
+        blur(3);
+        tint(#80000000);
+        hideHud(true);
+
+        Box panel = add(box().pos(50% - 150, 50% - 96).width(300).color(#F0181A1F).radius(8).border(1, #30FFFFFF).padding(10).column(6));
+        Box header = panel.add(box().row().justify(BETWEEN).alignItems(CENTER).width(100% - 6).padding(0, 6));
+        header.add(text("Shop").fontSize(14).bold(true));
+        coinText = header.add(text("").color(#FFD700));
+        showCoins();
+
+        Box list = panel.add(box().column(4).width(100%).height(150).scroll(true));
+
+        for (Offer offer : offers) {
+            list.add(row(offer));
+        }
+    }
+
+    Box row(Offer offer) {
+        Box row = box().row(8).alignItems(CENTER).width(100% - 6).height(26).padding(0, 6).color(#FF24262D).radius(5).cursor(HAND);
+        row.hover().color(#FF30333C);
+        row.pressed().scale(0.98);
+        row.transition(100ms);
+        row.add(item(offer.item()).size(18, 18).itemTooltip(false));
+        row.add(text(offer.name()).width(100% - 104));
+        row.add(text(offer.price() + " coins").color(#FFD700).width(70).align(RIGHT));
+        row.onClick(() -> {
+            if (coins < offer.price()) {
+                row.animate(80ms).color(#FF6B2020).then(300ms).color(#FF24262D);
+                playSound("minecraft:block.note_block.bass");
+                return;
+            }
+
+            send("buy", offer.id());
+        });
+        return row;
+    }
+
+    void showCoins() {
+        coinText.text(coins + " coins");
+    }
+
+    public void setCoins(int value) {
+        coins = value;
+        showCoins();
+        coinText.animate(100ms).scale(1.3).then(200ms).scale(1);
+    }
+
+    public void bought(String name) {
+        Box bar = add(box().pos(0, 100% - 40).width(100%).row().justify(CENTER));
+        Text toast = bar.add(text(mini("<green>Bought " + name)).background(#E0101010).padding(4, 8).radius(4));
+        toast.animate(300ms).delay(1500ms).transparency(100).onDone(() -> bar.remove());
+    }
+}

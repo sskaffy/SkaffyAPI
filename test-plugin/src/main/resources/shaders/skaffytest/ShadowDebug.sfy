@@ -1,0 +1,21 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class ShadowDebug {
+    const float shadowDistance = 96.0;
+    const int shadowResolution = 2048;
+
+    @Fragment(value = {TERRAIN, ENTITY}, fog = false)
+    vec4 show(Fragment f) {
+        if (length(f.position) > shadowDistance) {
+            return vec4(vec3(luminance(f.albedo.rgb)) * 0.6, f.albedo.a);
+        }
+
+        vec3 at = shadowPos(f.position + f.normal * 0.05);
+        bool open = texture(SHADOW_MAP, at.xy).r >= at.z - 0.0003;
+        bool openSolid = texture(SHADOW_MAP_SOLID, at.xy).r >= at.z - 0.0003;
+        vec3 light = open ? vec3(1.0) : openSolid ? texture(SHADOW_COLOR, at.xy).rgb : vec3(0.25, 0.35, 0.8);
+        return vec4(f.albedo.rgb * light, f.albedo.a);
+    }
+}

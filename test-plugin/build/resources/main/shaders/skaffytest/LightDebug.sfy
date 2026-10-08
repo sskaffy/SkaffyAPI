@@ -1,0 +1,25 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class LightDebug {
+    const int coloredLightRange = 128;
+
+    @Light({"minecraft:torch", "minecraft:wall_torch", "minecraft:lantern", "minecraft:campfire"}) const vec3 FIRE = #FF8A3A;
+    @Light({"minecraft:soul_torch", "minecraft:soul_wall_torch", "minecraft:soul_lantern"}) const vec3 SOUL = #3FD8FF;
+    @Light({"minecraft:redstone_torch", "minecraft:redstone_wall_torch"}) const vec3 REDSTONE = #FF2010;
+    @Light({"minecraft:glowstone", "minecraft:sea_lantern", "minecraft:shroomlight"}) const vec3 GLOW = #FFE08A;
+    @LightFilter({"minecraft:red_stained_glass", "minecraft:red_stained_glass_pane"}) const vec3 RED = #E03030;
+    @LightFilter({"minecraft:blue_stained_glass", "minecraft:blue_stained_glass_pane"}) const vec3 BLUE = #3050E0;
+    @LightFilter({"minecraft:green_stained_glass", "minecraft:green_stained_glass_pane"}) const vec3 GREEN = #40C040;
+
+    @Fragment(value = {TERRAIN, ENTITY}, fog = false)
+    vec4 show(Fragment f) {
+        if (!inLightVolume(f.worldPos)) {
+            return vec4(f.albedo.rgb * 0.08, f.albedo.a);
+        }
+
+        vec3 light = coloredLight(f.worldPos + f.normal * 0.5);
+        return vec4(f.albedo.rgb * (0.04 + light * 1.5), f.albedo.a);
+    }
+}

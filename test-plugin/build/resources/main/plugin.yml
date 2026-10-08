@@ -1,0 +1,9 @@
+name: SkaffyTest
+version: '1.0'
+main: test.SkaffyTest
+api-version: '26.3'
+depend: [SkaffysAPI]
+commands:
+  skaffytest:
+    description: Tests Skaffy's API features (blocks, particles, keybinds, entity models, fov, name tags, guis, perspective, brightness, player looks, shaders, Vista, build, animation entities)
+    usage: /skaffytest [clear | particle <name|all> | key [<keybind> <key>] | model ... | fov ... | nametag ... | gui ... | perspective ... | brightness ... | look ... | shader ... | vista ... | build ... | animation ...]

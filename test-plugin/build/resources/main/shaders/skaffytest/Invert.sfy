@@ -1,0 +1,10 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Invert {
+    @Pass
+    vec4 invert(vec2 uv) {
+        return vec4(1.0 - texture(SCREEN, uv).rgb, 1.0);
+    }
+}

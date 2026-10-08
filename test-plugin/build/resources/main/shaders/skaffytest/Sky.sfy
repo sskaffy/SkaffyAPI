@@ -1,0 +1,31 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Sky {
+    vec3 skyColor(vec3 direction, vec3 vanillaSky) {
+        float day = smoothstep(-0.15, 0.2, sunDirection.y);
+        float up = max(direction.y, 0.0);
+        vec3 zenith = vanillaSky * vec3(0.9, 0.97, 1.05);
+        vec3 color = mix(fogColor.rgb, zenith, smoothstep(0.0, 0.6, pow(up, 0.7)));
+        float toSun = max(dot(direction, sunDirection), 0.0);
+        float low = 1.0 - smoothstep(0.0, 0.35, abs(sunDirection.y));
+        color += vec3(1.0, 0.45, 0.15) * pow(toSun, 6.0) * low * 0.6;
+        color += vec3(1.0, 0.92, 0.75) * pow(toSun, 48.0) * 0.25 * day;
+        if (direction.y < 0.0) {
+            color = mix(color, fogColor.rgb, smoothstep(0.0, -0.2, direction.y));
+        }
+        return color;
+    }
+
+    @Fragment(value = SKY, fog = false)
+    vec4 sky(Fragment f) {
+        if (f.part == SKY) {
+            return vec4(skyColor(f.direction, f.color.rgb), 1.0);
+        }
+        if (f.part == SUNRISE) {
+            return vec4(0.0);
+        }
+        return f.vanilla;
+    }
+}

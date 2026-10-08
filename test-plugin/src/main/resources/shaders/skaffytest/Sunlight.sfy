@@ -1,0 +1,48 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Sunlight {
+    const float sunPathRotation = 30.0;
+
+    @Uniform float sunStrength = 1.0;
+
+    float vanillaShade(vec3 n) {
+        vec3 a = abs(n);
+        if (max(a.x, max(a.y, a.z)) < 0.9 || n.y > 0.9) {
+            return 1.0;
+        }
+        if (n.y < -0.9) {
+            return 0.5;
+        }
+        return a.z > 0.9 ? 0.8 : 0.6;
+    }
+
+    vec3 light(vec3 normal, float blockLight, float skyLight) {
+        vec3 n = normalize(normal);
+        float day = smoothstep(-0.1, 0.2, sunDirection.y);
+        float dusk = 1.0 - smoothstep(0.05, 0.5, sunDirection.y);
+        vec3 sunColor = mix(vec3(1.0, 0.93, 0.82), vec3(1.0, 0.6, 0.35), dusk) * sunStrength;
+        vec3 sky = mix(vec3(0.3, 0.32, 0.36), vec3(0.5, 0.6, 0.76), n.y * 0.5 + 0.5) * mix(0.12, 1.0, day);
+        float facing = max(dot(n, lightDirection), 0.0);
+        float open = smoothstep(0.55, 1.0, skyLight);
+        vec3 direct = mix(vec3(0.3, 0.38, 0.6) * 0.12, sunColor * 0.68, day) * facing * open * (1.0 - rain * 0.7);
+        vec3 torch = vec3(1.0, 0.7, 0.42) * blockLight * blockLight * 1.1;
+        return sky * skyLight * 0.62 + direct + torch + 0.02;
+    }
+
+    @Fragment({TERRAIN, BLOCK})
+    vec4 blocks(Fragment f) {
+        vec3 albedo = f.albedo.rgb / vanillaShade(f.normal);
+        return vec4(albedo * light(f.normal, f.blockLight, f.skyLight), f.albedo.a);
+    }
+
+    @Fragment({ENTITY, ITEM})
+    vec4 things(Fragment f) {
+        if (f.isHand) {
+            return f.vanilla;
+        }
+        vec3 base = f.vanilla.rgb / max(f.lightmap.rgb, vec3(0.03));
+        return vec4(base * light(f.normal, f.blockLight, f.skyLight), f.vanilla.a);
+    }
+}

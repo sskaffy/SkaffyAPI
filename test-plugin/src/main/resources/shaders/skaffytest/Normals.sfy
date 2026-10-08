@@ -1,0 +1,11 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Normals {
+    @Fragment({TERRAIN, BLOCK, ENTITY, ITEM})
+    vec4 show(Fragment f) {
+        vec3 n = normalize(f.normal);
+        return vec4(n * 0.5 + 0.5, f.albedo.a);
+    }
+}

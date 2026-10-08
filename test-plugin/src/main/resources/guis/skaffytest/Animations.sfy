@@ -1,0 +1,52 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class Animations {
+    int ticks;
+
+    @Gui
+    public void main() {
+        tint(#B0000000);
+        onEscape(() -> second());
+
+        Box panel = add(box().pos(20, 20).column(8));
+        panel.add(text("Animations (Esc goes to page 2; Esc three times quickly always closes)").bold(true));
+
+        Box pulse = panel.add(box().size(40, 40).color(#FF5865F2).radius(20));
+        pulse.animate(600ms).ease(EASE_IN_OUT_SINE).scale(1.3).pingPong().loop();
+
+        Box slide = panel.add(box().size(40, 20).color(#FF57F287).radius(4));
+        slide.animate(800ms).ease(EASE_OUT_BOUNCE).offset(200, 0).then(800ms).ease(EASE_IN_OUT_CUBIC).offset(0, 0).loop();
+
+        Box colors = panel.add(box().size(120, 20).radius(4).color(#FFFF5F6D));
+        colors.animate(1s).color(#FF7AD7FF).then(1s).color(#FFC77DFF).then(1s).color(#FFFF5F6D).loop();
+
+        Text clock = panel.add(text(""));
+        every(1s, () -> clock.text("Time: " + formatTime(time(), "HH:mm:ss") + "   (" + ++ticks + " seconds here)"));
+
+        Box easings = panel.add(box().column(3));
+
+        for (Easing easing : List.of(Easing.LINEAR, Easing.EASE_OUT_QUAD, Easing.EASE_IN_OUT_CUBIC, Easing.EASE_OUT_BACK, Easing.EASE_OUT_ELASTIC, Easing.EASE_OUT_BOUNCE)) {
+            Box line = easings.add(box().row(6).alignItems(CENTER));
+            line.add(text(easing.name()).width(130).fontSize(6));
+            Box dot = line.add(box().size(10, 10).radius(5).color(#FFFFFFFF));
+            dot.animate(1200ms).ease(easing).offset(150, 0).pingPong().loop();
+        }
+
+        Button next = panel.add(button("Page 2 ->"));
+        next.onClick(() -> second());
+        next.hover().scale(1.05);
+        next.transition(150ms, EASE_OUT_BACK);
+    }
+
+    @Gui
+    public void second() {
+        tint(#B0101030);
+        Box panel = add(box().pos(50% - 110, 50% - 40).size(220, 80).color(#F0202030).radius(10).column(8).alignItems(CENTER).justify(CENTER));
+        panel.add(text("Page 2 (ticks is still " + ticks + ")"));
+        panel.add(button("<- Back")).onClick(() -> main());
+        panel.transparency(100).scale(0.9);
+        panel.animate(250ms).ease(EASE_OUT_CUBIC).transparency(0).scale(1);
+    }
+}

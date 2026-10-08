@@ -1,0 +1,24 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Broken {
+    @Uniform float strength = 0.5;
+    float notConst;
+
+    @Pass
+    vec4 apply(vec2 uv) {
+        vec3 color = texture(SCREEN, uv);
+        float x = 5 % 2.0;
+        int y = 1.5;
+        strength = 2.0;
+        undefinedThing(3);
+        return vec3(1.0);
+    }
+
+    @Vertex(TERRAIN)
+    void wave(Vertex v) {
+        v.worldPos.x = 1.0;
+        float d = dFdx(v.position.x);
+    }
+}

@@ -1,0 +1,37 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Blur {
+    @Uniform float radius = 2.0;
+
+    @Target(scale = 0.5) Texture across;
+    @Target(scale = 0.5) Texture both;
+
+    const float[] WEIGHTS = {0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216};
+
+    vec3 gauss(Texture source, vec2 uv, vec2 direction) {
+        vec2 offset = texelSize(source) * direction * radius;
+        vec3 sum = texture(source, uv).rgb * WEIGHTS[0];
+        for (int i = 1; i < 5; i++) {
+            sum += texture(source, uv + offset * float(i)).rgb * WEIGHTS[i];
+            sum += texture(source, uv - offset * float(i)).rgb * WEIGHTS[i];
+        }
+        return sum;
+    }
+
+    @Pass(output = across)
+    vec4 horizontal(vec2 uv) {
+        return vec4(gauss(SCREEN, uv, vec2(1.0, 0.0)), 1.0);
+    }
+
+    @Pass(output = both)
+    vec4 vertical(vec2 uv) {
+        return vec4(gauss(across, uv, vec2(0.0, 1.0)), 1.0);
+    }
+
+    @Pass
+    vec4 show(vec2 uv) {
+        return texture(both, uv);
+    }
+}

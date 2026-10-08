@@ -1,0 +1,6 @@
+# Who may move into barriers without being pulled back by the server.
+# Custom blocks sit on barriers, and their collision can be smaller than a full block.
+#   everyone      - every player, every barrier
+#   custom-blocks - only players with the mod, only barriers that are custom blocks or have block shapes for them
+#   nobody        - vanilla behavior
+barrier-movement: everyone

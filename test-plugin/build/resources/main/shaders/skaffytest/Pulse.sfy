@@ -1,0 +1,16 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Pulse {
+    @Uniform float strength = 0.0;
+    @Uniform vec3 color = #FF2020;
+
+    @Pass
+    vec4 pulse(vec2 uv) {
+        vec3 base = texture(SCREEN, uv).rgb;
+        vec2 centered = (uv - 0.5) * vec2(screenSize.x / screenSize.y, 1.0);
+        float edge = smoothstep(0.25, 0.9, length(centered) * 1.3);
+        return vec4(mix(base, color, edge * strength), 1.0);
+    }
+}

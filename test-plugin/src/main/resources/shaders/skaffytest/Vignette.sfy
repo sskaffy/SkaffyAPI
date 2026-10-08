@@ -1,0 +1,16 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Vignette {
+    @Uniform float strength = 0.75;
+    @Uniform vec3 tint = #000000;
+
+    @Pass
+    vec4 vignette(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        vec2 centered = (uv - 0.5) * vec2(screenSize.x / screenSize.y, 1.0);
+        float edge = smoothstep(0.3, 0.95, length(centered) * 1.2);
+        return vec4(mix(color, tint, edge * strength), 1.0);
+    }
+}

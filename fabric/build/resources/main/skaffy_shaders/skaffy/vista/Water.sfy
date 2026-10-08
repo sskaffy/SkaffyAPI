@@ -1,0 +1,96 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class Water {
+
+    @Uniform float waves = 1.0;
+    @Uniform float reflections = 1.0;
+    @Uniform float clarity = 1.0;
+
+    @Texture(value = "vista_noise.png", filter = LINEAR) Texture noise;
+
+    const vec3 ABSORPTION = vec3(0.32, 0.085, 0.05);
+
+    float height(vec2 at) {
+        float t = time;
+        float h = sin(dot(at, vec2(0.7, 0.3)) * 1.1 + t * 1.6) * 0.03;
+        h += sin(dot(at, vec2(-0.4, 0.9)) * 1.7 + t * 2.1) * 0.018;
+        h += (texture(noise, at * 0.035 + vec2(t * 0.012, t * 0.007)).g - 0.5) * 0.12;
+        h += (texture(noise, at * 0.11 - vec2(t * 0.02, -t * 0.015)).a - 0.5) * 0.05;
+        return h * waves;
+    }
+
+    vec3 normal(vec3 world) {
+        float step = 0.08;
+        float h = height(world.xz);
+        return normalize(vec3(h - height(world.xz + vec2(step, 0.0)), step, h - height(world.xz + vec2(0.0, step))));
+    }
+
+    vec3 caustics(vec3 world) {
+        float a = texture(noise, world.xz * 0.08 + vec2(time * 0.02, time * 0.013)).a;
+        float b = texture(noise, world.xz * 0.11 - vec2(time * 0.025, -time * 0.017) + 0.4).a;
+        float lines = pow(clamp(1.0 - abs(a - b) * 3.5, 0.0, 1.0), 6.0);
+        return vec3(0.45, 0.72, 0.9) * (0.5 + lines * 1.3) * 0.5;
+    }
+
+    vec4 shade(vec3 position, vec3 world, vec3 geometry, vec3 tint, float sky, float block, float range, float dither) {
+        vec3 view = normalize(position);
+        bool top = geometry.y > 0.5;
+        bool below = geometry.y < -0.5;
+        vec3 n = top ? normal(world) : geometry;
+
+        if (below) {
+            vec3 wave = normal(world);
+            n = normalize(mix(geometry, vec3(wave.x, -wave.y, wave.z), 0.5));
+        }
+
+        vec2 uv = toScreen(position);
+        vec3 straight = texture(SOLID, uv).rgb;
+
+        if (isInWater) {
+            vec2 bent = clamp(uv + n.xz * 0.03, vec2(0.001), vec2(0.999));
+            float ripple = below ? clamp(0.94 + (n.x * 0.6 + n.z * 0.4) * 0.6, 0.85, 1.1) : 1.0;
+            return blend(texture(SOLID, bent).rgb * vec3(0.55, 0.8, 1.0) * ripple, straight, vec3(0.0), 0.55);
+        }
+
+        float distance = length(position);
+        vec2 bent = clamp(uv + n.xz * 0.05 / (1.0 + distance * 0.06), vec2(0.001), vec2(0.999));
+        float behindDepth = texture(SOLID_DEPTH, bent).r;
+        vec3 behind = depthToRelative(bent, behindDepth);
+
+        if (behindDepth > 0.0 && length(behind) < distance) {
+            bent = uv;
+            behindDepth = texture(SOLID_DEPTH, bent).r;
+            behind = depthToRelative(bent, behindDepth);
+        }
+
+        float thickness = behindDepth <= 0.0 ? 64.0 : max(length(behind) - distance, 0.0);
+        vec3 through = exp(-thickness * ABSORPTION / clarity);
+        vec3 color = tint / max(luminance(tint), 0.05) * 0.5;
+        vec3 inside = Palette.skyAmbient(vec3(0.0, 1.0, 0.0)) * sky * sky * 0.6 + Palette.directLight() * 0.1 * sky * (1.0 - Clouds.shadow(world))
+                + Lighting.block(world, n, block) * 0.5 + Palette.caveLight();
+        vec3 scattered = inside * color * (1.0 - exp(-thickness * 0.6));
+
+        vec3 bounce = reflect(view, n);
+        vec4 traced = distance < effectDistance ? Rays.trace(SOLID, SOLID_DEPTH, position, bounce, dither) : vec4(0.0);
+        vec3 skyBounce = Sky.full(normalize(vec3(bounce.x, max(bounce.y, 0.02), bounce.z))) * smoothstep(0.3, 0.95, sky);
+        vec3 mirrored = mix(skyBounce, traced.rgb, traced.a);
+        float fresnel = clamp((0.02 + 0.98 * pow(1.0 - max(dot(-view, n), 0.0), 5.0)) * reflections, 0.0, 1.0);
+
+        vec3 shadow = Lighting.sunShadow(position, geometry, range, dither) * (1.0 - Clouds.shadow(world));
+        vec3 glint = dimension == OVERWORLD ? Palette.directLight() * shadow * Lighting.specular(n, -view, lightDirection, 0.97, 0.02) : vec3(0.0);
+        float foam = top ? (1.0 - smoothstep(0.0, 0.35, thickness)) * 0.5 : 0.0;
+        vec3 foamColor = Palette.skyAmbient(vec3(0.0, 1.0, 0.0)) * sky + Palette.directLight() * shadow * 0.5;
+
+        float keep = (1.0 - fresnel) * (1.0 - foam);
+        vec3 added = (mirrored * fresnel + glint) * (1.0 - foam) + foamColor * foam;
+        return blend(texture(SOLID, bent).rgb * through * keep, straight, scattered * keep + added, min(through.r, min(through.g, through.b)) * keep);
+    }
+
+    vec4 blend(vec3 bent, vec3 straight, vec3 added, float kept) {
+        vec3 replaced = max(bent - straight * kept, vec3(0.0)) + added;
+        float alpha = clamp(1.0 - kept, 0.02, 1.0);
+        return vec4(replaced / alpha, alpha);
+    }
+}

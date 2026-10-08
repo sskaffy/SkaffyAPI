@@ -1,0 +1,121 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class Showcase {
+    Text status;
+    int clicks;
+    double spinnerAngle;
+
+    @Gui
+    public void main() {
+        blur(4);
+        tint(#70000000, #B0000000);
+        LOGGER.info("Showcase opened for {}", playerName());
+
+        Box panel = add(box()
+                .pos(50% - 230, 16)
+                .size(460, 100% - 32)
+                .color(#E61A1C22)
+                .radius(8)
+                .border(1, #3AFFFFFF)
+                .shadow(#90000000, 18, 0, 6)
+                .padding(12)
+                .column(8)
+                .scroll(true));
+
+        panel.add(text(mini("<gradient:#7AD7FF:#C77DFF><bold>Skaffy's API</bold></gradient> <gray>GUI showcase <sprite:minecraft:item/diamond> <head:" + playerName() + ">")).fontSize(12));
+        status = panel.add(text("Hover and click things").color(#AAAAAA));
+
+        panel.add(section("Boxes"));
+        Box boxes = panel.add(box().row(8).wrap(true).width(100%));
+        boxes.add(box().size(60, 40).color(#FF4C6EF5).radius(6));
+        boxes.add(box().size(60, 40).gradient(135, #FFFF5F6D, #FFFFC371).radius(12));
+        boxes.add(box().size(60, 40).color(#FF2B2D31).border(2, #FF7AD7FF).radius(20));
+        boxes.add(box().size(60, 40).color(#FF57F287).radius(10).pixelCorners(true));
+        boxes.add(box().size(60, 40).color(#FF303030).shadow(#C07AD7FF, 12, 0, 0, 2).radius(6));
+        boxes.add(box().size(60, 40).color(#FF2B2D31).border(1.0 / guiScale(), #FFFFFFFF).radius(6).tooltip("A border one screen pixel thin"));
+        Box spinner = boxes.add(box().size(40, 40).gradient(#FFC77DFF, #FF7AD7FF).radius(4));
+        onFrame(delta -> spinner.rotate(spinnerAngle += delta * 0.09));
+
+        Box hoverBox = boxes.add(box().size(60, 40).color(#FF3A3A3A).radius(6).cursor(HAND).tooltip("I change when hovered and pressed"));
+        hoverBox.hover().color(#FF5865F2).scale(1.08);
+        hoverBox.pressed().color(#FF4752C4).scale(0.95);
+        hoverBox.transition(120ms, EASE_OUT_QUAD);
+        hoverBox.onClick(e -> {
+            clicks++;
+            status.text("Clicked " + clicks + " times, at " + (int) e.x() + ", " + (int) e.y() + " inside the box");
+        });
+        hoverBox.onRightClick(() -> status.text("Right click!"));
+
+        panel.add(section("Text"));
+        panel.add(text("Big bold text").fontSize(16).bold(true));
+        panel.add(text("The uniform font").font(UNIFORM));
+        panel.add(text("The enchanting table font").font(ALT));
+        panel.add(text(mini("<rainbow>Rainbow text from MiniMessage</rainbow> with <u>underline</u>, <st>strikethrough</st> and <obf>magic</obf>")).width(100%));
+        panel.add(text("This line is long, so it wraps: the text element has a width, just like a paragraph on a website. It is centered too.").width(100%).align(CENTER).color(#DDDDDD));
+
+        panel.add(section("Pictures"));
+        Box pictures = panel.add(box().row(8).alignItems(CENTER).wrap(true).width(100%));
+        pictures.add(image("minecraft:block/diamond_ore").size(32, 32));
+        pictures.add(image("minecraft:block/diamond_ore").size(32, 32).radius(10));
+        pictures.add(sprite("widget/button").size(80, 20));
+        pictures.add(head(playerName()).size(32, 32).radius(4));
+        pictures.add(item("minecraft:diamond_sword[enchantments={sharpness:5}]").size(32, 32));
+        pictures.add(item("minecraft:emerald").count(12).size(24, 24));
+        pictures.add(player().size(50, 72));
+        pictures.add(entity("minecraft:zombie").size(50, 72).rotation(20, 0));
+
+        panel.add(section("Controls"));
+        Field name = panel.add(field().width(100%).placeholder("Type something (Cmd/Ctrl+Z undoes)").maxLength(40));
+        Text echo = panel.add(text("").color(#88FFFFFF).hide());
+        name.onChange(value -> echo.text("You typed: " + value).visible(!value.isEmpty()));
+        name.onSubmit(value -> {
+            send("typed", value);
+            status.text("Sent \"" + value + "\" to the server");
+        });
+
+        Box volumeRow = panel.add(box().row(10).alignItems(CENTER));
+        Slider volume = volumeRow.add(slider(0, 100).width(200).step(5).value(40));
+        Text volumeText = volumeRow.add(text("Volume: 40"));
+        volume.onChange(value -> volumeText.text("Volume: " + (int) value));
+
+        Box buttons = panel.add(box().row(6));
+        buttons.add(button("Open a link")).onClick(() -> openLink("https://www.minecraft.net"));
+        buttons.add(button("Copy my name")).onClick(() -> {
+            copy(playerName());
+            status.text("Copied your name");
+        });
+        buttons.add(button("Disabled").disabled(true));
+        buttons.add(button("Close")).onClick(() -> close());
+
+        panel.add(section("Canvas"));
+        panel.add(canvas(g -> {
+            g.roundRect(0, 0, g.width(), g.height(), 6, #20FFFFFF);
+
+            for (int i = 0; i < 20; i++) {
+                double height = 8 + (Math.sin(time() / 400.0 + i * 0.6) + 1) * 20;
+                g.roundRect(8 + i * 20, g.height() - height - 4, 12, height, 3, Color.hsb(i * 18, 0.6, 1));
+            }
+
+            g.line(0, g.height() / 2, g.width(), g.height() / 2, 1, #60FFFFFF);
+            g.ring(g.width() - 20, 20, 10, 2, #FFFF5F6D);
+        }).size(100%, 70));
+
+        panel.add(section("Drag the dot"));
+        Box area = panel.add(box().size(100%, 60).color(#20FFFFFF).radius(6));
+        Box handle = area.add(box().pos(10, 10).size(40, 40).color(#FF5865F2).radius(20).cursor(RESIZE_ALL).draggable(true).dragInParent(true));
+        handle.hover().color(#FF6D7AF7);
+        handle.onDrop(e -> status.text("Dropped at " + (int) e.screenX() + ", " + (int) e.screenY()));
+
+        onKey(e -> {
+            if (e.key().equals("key.keyboard.r")) {
+                status.text("You pressed R");
+            }
+        });
+    }
+
+    Text section(String title) {
+        return text(title).fontSize(10).color(#7AD7FF).bold(true).padding(6, 0, 0, 0);
+    }
+}

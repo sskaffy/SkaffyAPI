@@ -1,0 +1,19 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class DepthFog {
+    @Uniform vec3 fogTint = #C8D4E8;
+    @Uniform float start = 8.0;
+    @Uniform float end = 48.0;
+
+    @Pass(stage = WORLD)
+    vec4 fog(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        if (isSky(uv)) {
+            return vec4(mix(color, fogTint, 0.6), 1.0);
+        }
+        float amount = smoothstep(start, end, linearDepth(uv));
+        return vec4(mix(color, fogTint, amount), 1.0);
+    }
+}

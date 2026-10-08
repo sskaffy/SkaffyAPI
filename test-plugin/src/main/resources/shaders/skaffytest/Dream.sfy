@@ -1,0 +1,35 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Dream {
+    @Uniform float strength = 0.7;
+    @Uniform vec3 tint = vec3(1.0, 0.85, 0.95);
+    @Uniform bool enabled = true;
+    @Uniform mat3 colorMatrix = mat3(1.0);
+
+    @Target(scale = 0.5) Texture soft;
+
+    const float[] WEIGHTS = {0.05, 0.09, 0.12, 0.15, 0.18, 0.15, 0.12, 0.09, 0.05};
+
+    @Pass(output = soft)
+    vec4 blur(vec2 uv) {
+        vec4 sum = vec4(0.0);
+        for (int i = -4; i <= 4; i++) {
+            vec2 offset = vec2(float(i), float(i) * 0.5) * texelSize(SCREEN) * 3.0;
+            sum += texture(SCREEN, uv + offset) * WEIGHTS[i + 4];
+        }
+        return sum;
+    }
+
+    @Pass
+    vec4 apply(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        if (!enabled) {
+            return vec4(color, 1.0);
+        }
+        float far = isSky(uv) ? 1.0 : smoothstep(5.0, 60.0, linearDepth(uv));
+        vec3 dreamy = mix(color, texture(soft, uv).rgb * tint * 1.15, strength * (0.35 + 0.65 * far));
+        return vec4(colorMatrix * dreamy, 1.0);
+    }
+}

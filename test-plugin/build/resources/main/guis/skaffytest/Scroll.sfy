@@ -1,0 +1,38 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class Scroll {
+    @Gui
+    public void main() {
+        tint(#A0000000);
+        pageScrollbar(MODERN);
+
+        Box header = add(box().pos(0, 0).size(100%, 24).color(#F0101010).fixed(true).z(10).row().alignItems(CENTER).padding(0, 8));
+        header.add(text("Fixed header. Wheel scrolls the page, Cmd (Mac) or Alt + wheel scrolls sideways."));
+
+        Box lines = add(box().pos(20, 40).column(10));
+
+        for (int i = 1; i <= 40; i++) {
+            lines.add(text("Line " + i + " of a long page").color(i % 2 == 0 ? #FFFFFF : #AAAAAA));
+        }
+
+        add(box().pos(1400, 60).size(200, 40).color(#FF5865F2).radius(6).row().alignItems(CENTER).padding(0, 10)).add(text("Far to the right"));
+
+        Box areas = add(box().pos(260, 40).row(12));
+
+        for (ScrollbarStyle style : List.of(ScrollbarStyle.VANILLA, ScrollbarStyle.MODERN, ScrollbarStyle.CUSTOM, ScrollbarStyle.HIDDEN)) {
+            Box area = areas.add(box().size(120, 150).color(#30FFFFFF).radius(6).padding(6).scroll(true).scrollbar(style).column(4));
+
+            if (style == ScrollbarStyle.CUSTOM) {
+                area.scrollbarColors(#FFFF8800, #30FF8800).scrollbarWidth(6);
+            }
+
+            area.add(text(style.name()).bold(true));
+
+            for (int i = 1; i <= 20; i++) {
+                area.add(text("Item " + i));
+            }
+        }
+    }
+}

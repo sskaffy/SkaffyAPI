@@ -1,0 +1,46 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Bloom {
+    @Uniform float threshold = 0.7;
+    @Uniform float intensity = 0.9;
+
+    @Target(scale = 0.25) Texture bright;
+    @Target(scale = 0.25) Texture blurA;
+    @Target(scale = 0.25) Texture blurB;
+
+    const float[] WEIGHTS = {0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216};
+
+    vec3 gauss(Texture source, vec2 uv, vec2 direction) {
+        vec2 offset = texelSize(source) * direction * 1.5;
+        vec3 sum = texture(source, uv).rgb * WEIGHTS[0];
+        for (int i = 1; i < 5; i++) {
+            sum += texture(source, uv + offset * float(i)).rgb * WEIGHTS[i];
+            sum += texture(source, uv - offset * float(i)).rgb * WEIGHTS[i];
+        }
+        return sum;
+    }
+
+    @Pass(output = bright)
+    vec4 extract(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        float glow = smoothstep(threshold, threshold + 0.25, luminance(color));
+        return vec4(color * glow, 1.0);
+    }
+
+    @Pass(output = blurA)
+    vec4 blurX(vec2 uv) {
+        return vec4(gauss(bright, uv, vec2(1.0, 0.0)), 1.0);
+    }
+
+    @Pass(output = blurB)
+    vec4 blurY(vec2 uv) {
+        return vec4(gauss(blurA, uv, vec2(0.0, 1.0)), 1.0);
+    }
+
+    @Pass(blend = ADD)
+    vec4 add(vec2 uv) {
+        return vec4(texture(blurB, uv).rgb * intensity, 0.0);
+    }
+}

@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "skaffys-api",
+	"version": "${version}",
+	"name": "Skaffy's API",
+	"description": "Client sided APIs for servers.",
+	"authors": [
+		"Skaffy"
+	],
+	"contact": {
+		"sources": "https://github.com/sskaffy/SkaffyAPI",
+		"issues": "https://github.com/sskaffy/SkaffyAPI/issues"
+	},
+	"license": "Custom License",
+	"icon": "assets/skaffys-api/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"me.skaffy.client.SkaffySAPIClient"
+		]
+	},
+	"mixins": [
+		"skaffys-api.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

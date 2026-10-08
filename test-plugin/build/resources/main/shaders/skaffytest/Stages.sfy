@@ -1,0 +1,28 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Stages {
+    vec4 tint(vec2 uv, float from, float to, vec3 color) {
+        vec3 base = texture(SCREEN, uv).rgb;
+        if (uv.x < from || uv.x >= to) {
+            return vec4(base, 1.0);
+        }
+        return vec4(mix(base, color, 0.35), 1.0);
+    }
+
+    @Pass(stage = WORLD)
+    vec4 world(vec2 uv) {
+        return tint(uv, 0.0, 1.0 / 3.0, vec3(1.0, 0.0, 0.0));
+    }
+
+    @Pass(stage = SCREEN)
+    vec4 screen(vec2 uv) {
+        return tint(uv, 1.0 / 3.0, 2.0 / 3.0, vec3(0.0, 1.0, 0.0));
+    }
+
+    @Pass(stage = FINAL)
+    vec4 everything(vec2 uv) {
+        return tint(uv, 2.0 / 3.0, 1.0, vec3(0.0, 0.3, 1.0));
+    }
+}

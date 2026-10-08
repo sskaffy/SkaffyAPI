@@ -1,0 +1,21 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Trail {
+    @Uniform float persistence = 0.85;
+
+    @Target(persistent = true) Texture history;
+
+    @Pass(output = history)
+    vec4 remember(vec2 uv) {
+        vec3 now = texture(SCREEN, uv).rgb;
+        vec3 before = texture(history, uv).rgb;
+        return vec4(mix(now, before, persistence), 1.0);
+    }
+
+    @Pass
+    vec4 show(vec2 uv) {
+        return texture(history, uv);
+    }
+}

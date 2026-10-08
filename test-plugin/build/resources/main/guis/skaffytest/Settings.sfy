@@ -1,0 +1,31 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class Settings {
+    @Gui
+    public void main(String nickname, double volume, boolean music, String difficulty) {
+        menuBackground(true);
+
+        Box panel = add(box().pos(50% - 110, 20).width(220).column(6).alignItems(STRETCH));
+        panel.add(text("Settings").fontSize(12).align(CENTER).width(100%));
+        VanillaField nick = panel.add(vanillaField().text(nickname).placeholder("Nickname").maxLength(16));
+        VanillaSlider sound = panel.add(vanillaSlider(0, 100).value(volume).step(1).label(value -> "Volume: " + Math.round(value) + "%"));
+        Checkbox musicBox = panel.add(checkbox("Music").checked(music));
+        CycleButton level = panel.add(cycleButton(List.of("Peaceful", "Easy", "Normal", "Hard")).label("Difficulty").value(difficulty));
+
+        panel.add(text("Custom widgets").align(CENTER).width(100%).color(#AAAAAA));
+        Slider custom = panel.add(slider(0, 10).step(1).value(5));
+        custom.track().color(#40FF8800);
+        custom.fill().color(#FFFF8800);
+        custom.knob().color(#FFFFFFFF).size(12, 12).radius(6);
+        Field notes = panel.add(field().multiline(true).height(50).placeholder("Notes (several lines)"));
+
+        Box row = panel.add(box().row(6).justify(END));
+        row.add(vanillaButton("Cancel").width(80)).onClick(() -> close());
+        row.add(vanillaButton("Save").width(80)).onClick(() -> {
+            send("save", nick.text(), sound.value(), musicBox.checked(), level.value(), custom.value(), notes.text());
+            close();
+        });
+    }
+}
