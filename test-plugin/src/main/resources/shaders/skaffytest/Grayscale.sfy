@@ -1,0 +1,13 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Grayscale {
+    @Uniform float amount = 1.0;
+
+    @Pass
+    vec4 gray(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        return vec4(mix(color, vec3(luminance(color)), amount), 1.0);
+    }
+}

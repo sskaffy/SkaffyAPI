@@ -1,0 +1,41 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class Rays {
+
+    vec4 trace(Texture picture, Texture depth, vec3 start, vec3 direction, float dither) {
+        float stepLength = 0.5;
+        vec3 position = start + direction * (0.15 + dither * stepLength);
+
+        for (int i = 0; i < 28; i++) {
+            if (!inFront(position)) {
+                break;
+            }
+
+            vec3 screen = toScreenDepth(position);
+
+            if (screen.x < 0.0 || screen.x > 1.0 || screen.y < 0.0 || screen.y > 1.0 || screen.z <= 0.0) {
+                break;
+            }
+
+            float scene = texture(depth, screen.xy).r;
+
+            if (scene > screen.z) {
+                vec3 hit = depthToRelative(screen.xy, scene);
+                float behind = length(position) - length(hit);
+
+                if (behind < 0.6 + stepLength * 1.5) {
+                    vec2 edge = min(screen.xy, 1.0 - screen.xy);
+                    float fade = smoothstep(0.0, 0.08, min(edge.x, edge.y));
+                    return vec4(texture(picture, screen.xy).rgb, fade);
+                }
+            }
+
+            position += direction * stepLength;
+            stepLength *= 1.16;
+        }
+
+        return vec4(0.0);
+    }
+}

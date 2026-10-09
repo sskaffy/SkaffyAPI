@@ -1,0 +1,52 @@
+Copyright (c) 2026 Skaffy. All rights reserved.
+
+You MAY:
+- Include this mod, unmodified, in any modpack, public or private.
+- Use this mod on any server (including servers with paid ranks/perks)
+  and in videos/streams.
+- Change the mod's config files within a modpack.
+- Earn money from modpacks containing this mod through platform reward
+  programs (e.g. CurseForge, Modrinth).
+- Develop mods, plugins, or server software that depend on, compile
+  against, and call this mod's APIs. Your own code remains yours and
+  may use any license you choose.
+- Read the source code to better understand the APIs, and fork it
+  solely to submit contributions back to this project.
+- Modify the mod for private, personal use without distributing it.
+
+You MAY NOT:
+- Sell this mod or any modpack containing it, or put either behind
+  a paywall (including paid early access).
+- Distribute modified versions of this mod, reupload it outside of a
+  modpack, or bundle it inside another mod (list it as a dependency
+  instead).
+- Copy substantial portions of the source code into other projects.
+- Claim this mod as your own.
+
+Modpacks including this mod must link back to the original mod page.
+
+Exception for the server plugin:
+The server plugin (SkaffysAPI: the "paper" and "paper-api" folders,
+together with the protocol code bundled inside the plugin) may be forked,
+modified and shared, including modified versions, as long as it stays
+free of charge and credits Skaffy with a link to the original project.
+This exception does not cover the mod.
+
+The .sfy language:
+- GUI files written in the .sfy language belong to their authors, who
+  may use any license for them, share them and sell them.
+- The syntax coloring package (the "editor/sfy" folder) may be modified
+  and shared, including modified versions, as long as it credits Skaffy
+  with a link to the original project.
+- Anyone may build tools that read, check or edit .sfy files (editor
+  plugins, language servers, linters, formatters, checkers), under any
+  license. Tools may not run .sfy files: building a compiler or runtime
+  that runs them anywhere but in this mod is not allowed. Such tools
+  must be written independently; copying this mod's source code into
+  them is still not allowed.
+
+Contributions submitted to this project are licensed under these same
+terms, and the author may use them without restriction.
+
+THIS MOD IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. THE AUTHOR
+IS NOT LIABLE FOR ANY DAMAGES, DATA LOSS, OR ISSUES ARISING FROM ITS USE.

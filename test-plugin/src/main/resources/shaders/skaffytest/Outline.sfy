@@ -1,0 +1,25 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Outline {
+    @Uniform float thickness = 1.0;
+    @Uniform vec3 lineColor = #101010;
+
+    float depthAt(vec2 uv) {
+        return isSky(uv) ? far : linearDepth(uv);
+    }
+
+    @Pass(stage = WORLD)
+    vec4 outline(vec2 uv) {
+        vec2 pixel = thickness / screenSize;
+        float center = depthAt(uv);
+        float left = depthAt(uv - vec2(pixel.x, 0.0));
+        float right = depthAt(uv + vec2(pixel.x, 0.0));
+        float down = depthAt(uv - vec2(0.0, pixel.y));
+        float up = depthAt(uv + vec2(0.0, pixel.y));
+        float edge = abs(left + right + down + up - 4.0 * center) / max(center, 1.0);
+        vec3 color = texture(SCREEN, uv).rgb;
+        return vec4(mix(color, lineColor, clamp(edge * 6.0, 0.0, 1.0)), 1.0);
+    }
+}

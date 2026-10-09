@@ -1,0 +1,227 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Pretty {
+    const float sunPathRotation = 30.0;
+
+    @Blocks("#minecraft:leaves") const int LEAVES = 1;
+    @Blocks({"minecraft:short_grass", "minecraft:fern", "minecraft:short_dry_grass", "#minecraft:small_flowers", "#minecraft:crops",
+            "minecraft:sweet_berry_bush", "minecraft:dead_bush"}) const int PLANTS = 2;
+    @Blocks("minecraft:water") const int WATER = 3;
+    @Blocks({"minecraft:glowstone", "minecraft:sea_lantern", "minecraft:lantern", "minecraft:torch", "minecraft:wall_torch",
+            "minecraft:shroomlight", "minecraft:lava", "minecraft:jack_o_lantern", "minecraft:redstone_lamp"}) const int GLOWING = 4;
+
+    @Uniform float wind = 1.0;
+    @Uniform float sunStrength = 1.0;
+    @Uniform float rayStrength = 0.4;
+    @Uniform float bloomStrength = 0.3;
+    @Uniform float saturation = 1.08;
+
+    @Target(scale = 0.5) Texture rays;
+    @Target(scale = 0.25) Texture glow;
+    @Target(scale = 0.25) Texture glowBlur;
+
+    @Varying float sway;
+
+    const float[] WEIGHTS = {0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216};
+
+    float dayAmount() {
+        return smoothstep(-0.12, 0.22, sunDirection.y);
+    }
+
+    vec3 sunColor() {
+        float dusk = 1.0 - smoothstep(0.05, 0.5, sunDirection.y);
+        return mix(vec3(1.0, 0.93, 0.82), vec3(1.0, 0.55, 0.3), dusk) * sunStrength;
+    }
+
+    float vanillaShade(vec3 n) {
+        vec3 a = abs(n);
+        if (max(a.x, max(a.y, a.z)) < 0.9 || n.y > 0.9) {
+            return 1.0;
+        }
+        if (n.y < -0.9) {
+            return 0.5;
+        }
+        return a.z > 0.9 ? 0.8 : 0.6;
+    }
+
+    vec3 light(vec3 normal, float blockLight, float skyLight) {
+        vec3 n = normalize(normal);
+        float day = dayAmount();
+        vec3 sky = mix(vec3(0.3, 0.32, 0.36), vec3(0.48, 0.58, 0.76), n.y * 0.5 + 0.5) * mix(0.1, 1.0, day);
+        float facing = max(dot(n, lightDirection), 0.0);
+        float open = smoothstep(0.55, 1.0, skyLight);
+        vec3 moon = vec3(0.3, 0.38, 0.62) * 0.12;
+        vec3 direct = mix(moon, sunColor() * 0.7, day) * facing * open * (1.0 - rain * 0.75);
+        vec3 torch = vec3(1.0, 0.68, 0.38) * blockLight * blockLight * 1.15;
+        return sky * skyLight * 0.62 + direct + torch + 0.02;
+    }
+
+    @Vertex(TERRAIN)
+    void move(Vertex v) {
+        vec3 p = v.worldPos;
+        float t = time * (0.6 + wind);
+        sway = 0.0;
+
+        if (v.material == LEAVES) {
+            v.position += vec3(sin(t * 1.7 + p.x * 0.6 + p.y), sin(t * 1.3 + p.z * 0.6) * 0.5, cos(t * 1.5 + p.z * 0.5 + p.y)) * 0.03 * wind;
+        } else if (v.material == PLANTS && v.top) {
+            float gust = 0.6 + 0.4 * noise(p.xz * 0.15 + time * 0.3);
+            sway = gust;
+            v.position.xz += vec2(sin(t * 2.0 + p.x + p.z * 0.5), cos(t * 1.7 + p.z + p.x * 0.3)) * 0.11 * wind * gust;
+        } else if (v.material == WATER && v.top) {
+            v.position.y += (sin(t * 1.5 + p.x * 0.8) * cos(t * 1.1 + p.z * 0.7) - 1.0) * 0.035;
+        }
+    }
+
+    vec3 waterNormal(vec3 world) {
+        float t = time * 0.8;
+        float a = noise(world.xz * 0.9 + vec2(t, t * 0.6));
+        float b = noise(world.xz * 0.9 + vec2(0.1, 0.0) + vec2(t, t * 0.6));
+        float c = noise(world.xz * 0.9 + vec2(0.0, 0.1) + vec2(t, t * 0.6));
+        float d = noise(world.xz * 2.3 - vec2(t * 0.7, t));
+        return normalize(vec3((a - b) * 2.5 + (d - 0.5) * 0.15, 1.0, (a - c) * 2.5));
+    }
+
+    @Fragment({TERRAIN, BLOCK})
+    vec4 world(Fragment f) {
+        vec3 albedo = f.albedo.rgb;
+
+        if (f.material == WATER) {
+            vec3 normal = f.normal.y > 0.5 ? waterNormal(f.worldPos) : f.normal;
+            vec3 view = normalize(f.position);
+            float fresnel = pow(1.0 - max(dot(-view, normal), 0.0), 3.0);
+            vec3 deep = vec3(0.04, 0.18, 0.3) * light(vec3(0.0, 1.0, 0.0), f.blockLight, f.skyLight) * 2.0;
+            vec3 skyReflection = mix(fogColor.rgb, vec3(0.2, 0.4, 0.8) * dayAmount(), 0.4) * f.skyLight;
+            vec3 color = mix(deep, skyReflection, fresnel * 0.7);
+            float glint = pow(max(dot(reflect(view, normal), sunDirection), 0.0), 180.0) * dayAmount() * f.skyLight;
+            color += sunColor() * glint * 4.0;
+            return vec4(color, mix(0.62, 0.92, fresnel) * f.albedo.a + glint);
+        }
+
+        vec3 lit = albedo / vanillaShade(f.normal) * light(f.normal, f.blockLight, f.skyLight);
+
+        if (f.material == GLOWING) {
+            lit = max(lit, albedo * 1.25);
+        }
+
+        if (f.material == PLANTS) {
+            lit *= 1.0 + sway * 0.08;
+        }
+
+        return vec4(lit, f.albedo.a);
+    }
+
+    @Fragment({ENTITY, ITEM})
+    vec4 things(Fragment f) {
+        if (f.isHand) {
+            return f.vanilla;
+        }
+        vec3 base = f.vanilla.rgb / max(f.lightmap.rgb, vec3(0.03));
+        return vec4(base * light(f.normal, f.blockLight, f.skyLight), f.vanilla.a);
+    }
+
+    @Fragment(CLOUDS)
+    vec4 clouds(Fragment f) {
+        float day = dayAmount();
+        vec3 tint = mix(vec3(0.25, 0.3, 0.45), mix(sunColor(), vec3(1.0), 0.55), day);
+        return vec4(f.vanilla.rgb * tint, f.vanilla.a);
+    }
+
+    vec3 skyColor(vec3 direction, vec3 vanillaSky) {
+        float day = smoothstep(-0.15, 0.2, sunDirection.y);
+        float up = max(direction.y, 0.0);
+        vec3 zenith = vanillaSky * vec3(0.9, 0.97, 1.05);
+        vec3 color = mix(fogColor.rgb, zenith, smoothstep(0.0, 0.6, pow(up, 0.7)));
+        float toSun = max(dot(direction, sunDirection), 0.0);
+        float low = 1.0 - smoothstep(0.0, 0.35, abs(sunDirection.y));
+        color += vec3(1.0, 0.45, 0.15) * pow(toSun, 6.0) * low * 0.6;
+        color += vec3(1.0, 0.92, 0.75) * pow(toSun, 48.0) * 0.25 * day;
+        if (direction.y < 0.0) {
+            color = mix(color, fogColor.rgb, smoothstep(0.0, -0.2, direction.y));
+        }
+        return color;
+    }
+
+    @Fragment(value = SKY, fog = false)
+    vec4 sky(Fragment f) {
+        if (f.part == SKY) {
+            return vec4(skyColor(f.direction, f.color.rgb), 1.0);
+        }
+        if (f.part == SUNRISE) {
+            return vec4(0.0);
+        }
+        if (f.part == SUN) {
+            return f.vanilla * vec4(1.2, 1.1, 0.95, 1.0);
+        }
+        return f.vanilla;
+    }
+
+    vec3 gauss(Texture source, vec2 uv, vec2 direction) {
+        vec2 offset = texelSize(source) * direction * 1.5;
+        vec3 sum = texture(source, uv).rgb * WEIGHTS[0];
+        for (int i = 1; i < 5; i++) {
+            sum += texture(source, uv + offset * float(i)).rgb * WEIGHTS[i];
+            sum += texture(source, uv - offset * float(i)).rgb * WEIGHTS[i];
+        }
+        return sum;
+    }
+
+    @Pass(stage = WORLD, output = rays)
+    vec4 march(vec2 uv) {
+        vec3 sun = sunDirection * 100.0;
+        if (!inFront(sun) || sunDirection.y < -0.05 || isInWater) {
+            return vec4(0.0);
+        }
+        vec2 sunUv = toScreen(sun);
+        vec2 step = (sunUv - uv) / 28.0;
+        vec2 at = uv;
+        float light = 0.0;
+        float weight = 1.0;
+        for (int i = 0; i < 28; i++) {
+            at += step;
+            if (at.x >= 0.0 && at.x <= 1.0 && at.y >= 0.0 && at.y <= 1.0 && isSky(at)) {
+                light += weight;
+            }
+            weight *= 0.96;
+        }
+        float facing = pow(max(dot(cameraDirection, sunDirection), 0.0), 3.0);
+        return vec4(sunColor() * light / 18.0 * facing * (1.0 - rain), 1.0);
+    }
+
+    @Pass(stage = WORLD, blend = ADD)
+    vec4 addRays(vec2 uv) {
+        return vec4(texture(rays, uv).rgb * rayStrength * dayAmount(), 0.0);
+    }
+
+    @Pass(output = glow)
+    vec4 bright(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        return vec4(color * smoothstep(0.86, 1.0, luminance(color)), 1.0);
+    }
+
+    @Pass(output = glowBlur)
+    vec4 glowX(vec2 uv) {
+        return vec4(gauss(glow, uv, vec2(1.0, 0.0)), 1.0);
+    }
+
+    @Pass(output = glow)
+    vec4 glowY(vec2 uv) {
+        return vec4(gauss(glowBlur, uv, vec2(0.0, 1.0)), 1.0);
+    }
+
+    @Pass
+    vec4 grade(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb + texture(glow, uv).rgb * bloomStrength;
+        color = color / (1.0 + max(luminance(color) - 0.8, 0.0) * 0.5);
+        color = mix(vec3(luminance(color)), color, saturation);
+        color = color * color * (3.0 - 2.0 * color) * 0.2 + color * 0.8;
+        if (isInWater) {
+            color = mix(color, color * vec3(0.55, 0.8, 1.0), 0.6);
+        }
+        vec2 centered = (uv - 0.5) * vec2(screenSize.x / screenSize.y, 1.0);
+        color *= 1.0 - smoothstep(0.45, 1.1, length(centered)) * 0.28;
+        return vec4(clamp(color, 0.0, 1.0), 1.0);
+    }
+}

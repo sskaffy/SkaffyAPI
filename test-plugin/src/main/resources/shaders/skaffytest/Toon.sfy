@@ -1,0 +1,41 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Toon {
+    @Uniform float steps = 3.0;
+
+    float band(float value) {
+        return floor(value * steps + 0.5) / steps;
+    }
+
+    vec3 cel(vec3 albedo, vec3 normal, vec4 lightmap) {
+        float sun = max(dot(normalize(normal), lightDirection), 0.0);
+        float lit = band(0.35 + 0.65 * sun);
+        vec3 light = vec3(band(lightmap.r), band(lightmap.g), band(lightmap.b));
+        return albedo * light * (0.55 + 0.6 * lit);
+    }
+
+    @Fragment({TERRAIN, BLOCK, ENTITY, ITEM})
+    vec4 toon(Fragment f) {
+        return vec4(cel(f.albedo.rgb, f.normal, f.lightmap), f.albedo.a);
+    }
+
+    float depthAt(vec2 uv) {
+        return isSky(uv) ? far : linearDepth(uv);
+    }
+
+    @Pass(stage = WORLD)
+    vec4 lines(vec2 uv) {
+        vec2 pixel = 1.0 / screenSize;
+        float center = depthAt(uv);
+        float edge = 0.0;
+        edge += abs(depthAt(uv + vec2(pixel.x, 0.0)) - center);
+        edge += abs(depthAt(uv - vec2(pixel.x, 0.0)) - center);
+        edge += abs(depthAt(uv + vec2(0.0, pixel.y)) - center);
+        edge += abs(depthAt(uv - vec2(0.0, pixel.y)) - center);
+        float line = clamp(edge / max(center, 1.0) * 8.0 - 0.2, 0.0, 1.0);
+        vec3 color = texture(SCREEN, uv).rgb;
+        return vec4(mix(color, vec3(0.05), line), 1.0);
+    }
+}

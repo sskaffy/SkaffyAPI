@@ -1,0 +1,32 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class BufferDebug {
+    @Blocks("minecraft:water") const int WATER = 1;
+
+    @Output Texture normals;
+    @Output(format = RGBA8) Texture occlusion;
+
+    @Fragment(value = TERRAIN, fog = false)
+    vec4 store(Fragment f) {
+        write(normals, vec4(f.normal, 1.0));
+        write(occlusion, vec4(f.ao, f.ao, f.ao, 1.0));
+
+        if (f.material == WATER) {
+            vec3 behind = texture(SOLID, toScreen(f.position)).rgb;
+            return vec4(vec3(luminance(behind)), 1.0);
+        }
+
+        return f.vanilla;
+    }
+
+    @Pass(stage = DEFERRED)
+    vec4 show(vec2 uv) {
+        if (isSky(uv)) {
+            return texture(SCREEN, uv);
+        }
+
+        return uv.x < 0.5 ? vec4(texture(normals, uv).xyz * 0.5 + 0.5, 1.0) : vec4(texture(occlusion, uv).rgb, 1.0);
+    }
+}

@@ -1,0 +1,33 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class Sky {
+
+    vec3 atmosphere(vec3 direction) {
+        float above = max(direction.y, 0.0);
+        vec3 color = mix(Palette.zenith(), Palette.horizonColor(), pow(1.0 - above, 3.0));
+        float toSun = max(dot(direction, sunDirection), 0.0);
+        float halo = pow(toSun, 8.0) * 0.6 + pow(toSun, 64.0) * 0.8;
+        color += Palette.sunColor() * 0.12 * halo * Palette.day() * (1.0 - rain * 0.7);
+        float glow = pow(toSun, 3.0) * Palette.horizon() * pow(1.0 - above, 6.0);
+        color += #FF6B29 * glow * 0.9 * (1.0 - rain * 0.8);
+        float below = smoothstep(0.0, 0.6, -direction.y);
+        return mix(color, Palette.horizonColor() * 0.35, below);
+    }
+
+    vec3 moonGlow(vec3 direction) {
+        float toMoon = max(dot(direction, moonDirection), 0.0);
+        return Palette.moonColor() * pow(toMoon, 48.0) * 3.0 * (1.0 - Palette.day()) * (1.0 - rain);
+    }
+
+    vec3 full(vec3 direction) {
+        return atmosphere(direction) + moonGlow(direction);
+    }
+
+    vec3 end(vec3 direction) {
+        float n = noise(direction * 3.0 + vec3(time * 0.01, 0.0, 0.0)) * 0.6 + noise(direction * 9.0 - vec3(0.0, time * 0.02, 0.0)) * 0.4;
+        vec3 nebula = mix(#1A0F2E, #6B3FA8, smoothstep(0.45, 0.85, n));
+        return nebula * (0.6 + 0.4 * smoothstep(-0.3, 0.6, direction.y)) * 0.8;
+    }
+}

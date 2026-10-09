@@ -1,0 +1,361 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class Vista {
+    const bool hdr = true;
+    const bool taa = true;
+    const float sunPathRotation = 30.0;
+
+    const int coloredLightRange = 256;
+    @Uniform int shadowResolution = 2048;
+    @Uniform float shadowDistance = 512.0;
+    @Uniform float wind = 1.0;
+
+    @Light({"minecraft:torch", "minecraft:wall_torch", "minecraft:lantern", "minecraft:campfire", "minecraft:fire", "minecraft:jack_o_lantern",
+            "#minecraft:candles", "#minecraft:candle_cakes", "minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker", "minecraft:brewing_stand",
+            "minecraft:trial_spawner[ominous=false]", "minecraft:vault[ominous=false]"})
+    @Light(value = {"minecraft:open_eyeblossom", "minecraft:potted_open_eyeblossom"}, level = 3)
+    const vec3 FIRE = #FF9A4A;
+
+    @Light({"minecraft:soul_torch", "minecraft:soul_wall_torch", "minecraft:soul_lantern", "minecraft:soul_campfire", "minecraft:soul_fire",
+            "minecraft:sculk_catalyst", "minecraft:trial_spawner[ominous=true]", "minecraft:vault[ominous=true]"})
+    @Light(value = {"minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor"}, level = 4)
+    const vec3 SOUL = #3FD8FF;
+
+    @Light({"minecraft:redstone_torch", "minecraft:redstone_wall_torch", "minecraft:redstone_ore", "minecraft:deepslate_redstone_ore"})
+    @Light(value = {"minecraft:repeater[powered=true]", "minecraft:comparator[powered=true]"}, level = 4)
+    @Light(value = "minecraft:redstone_wire", level = 6, levelFrom = "power")
+    const vec3 REDSTONE = #FF2A12;
+
+    @Light({"minecraft:lava", "minecraft:lava_cauldron"})
+    @Light(value = "minecraft:magma_block", level = 6)
+    const vec3 MOLTEN = #FF5A14;
+
+    @Light({"minecraft:glowstone", "minecraft:shroomlight", "minecraft:redstone_lamp", "minecraft:ochre_froglight", "minecraft:glow_lichen",
+            "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:brown_mushroom", "minecraft:light",
+            "minecraft:copper_bulb", "minecraft:exposed_copper_bulb", "minecraft:weathered_copper_bulb", "minecraft:oxidized_copper_bulb",
+            "minecraft:waxed_copper_bulb", "minecraft:waxed_exposed_copper_bulb", "minecraft:waxed_weathered_copper_bulb", "minecraft:waxed_oxidized_copper_bulb"})
+    @Light(value = "minecraft:firefly_bush", level = 3)
+    const vec3 GLOW = #FFC870;
+
+    @Light({"minecraft:sea_lantern", "minecraft:conduit", "minecraft:beacon", "minecraft:verdant_froglight", "minecraft:sea_pickle"})
+    const vec3 SEA = #9AF2FF;
+
+    @Light({"minecraft:amethyst_cluster", "minecraft:large_amethyst_bud", "minecraft:medium_amethyst_bud", "minecraft:small_amethyst_bud", "minecraft:end_rod",
+            "minecraft:crying_obsidian", "minecraft:respawn_anchor", "minecraft:pearlescent_froglight", "minecraft:nether_portal", "minecraft:enchanting_table",
+            "minecraft:ender_chest", "minecraft:end_portal", "minecraft:end_gateway", "minecraft:end_portal_frame", "minecraft:dragon_egg"})
+    const vec3 MAGIC = #B77CFF;
+
+    @Light({"minecraft:copper_torch", "minecraft:copper_wall_torch", "minecraft:copper_lantern", "minecraft:exposed_copper_lantern",
+            "minecraft:weathered_copper_lantern", "minecraft:oxidized_copper_lantern", "minecraft:waxed_copper_lantern",
+            "minecraft:waxed_exposed_copper_lantern", "minecraft:waxed_weathered_copper_lantern", "minecraft:waxed_oxidized_copper_lantern"})
+    const vec3 COPPER = #7DFFA0;
+
+    @LightFilter({"minecraft:white_stained_glass", "minecraft:white_stained_glass_pane"}) const vec3 WHITE_GLASS = #F0F0F0;
+    @LightFilter({"minecraft:orange_stained_glass", "minecraft:orange_stained_glass_pane"}) const vec3 ORANGE_GLASS = #F08A30;
+    @LightFilter({"minecraft:magenta_stained_glass", "minecraft:magenta_stained_glass_pane"}) const vec3 MAGENTA_GLASS = #C050C0;
+    @LightFilter({"minecraft:light_blue_stained_glass", "minecraft:light_blue_stained_glass_pane"}) const vec3 LIGHT_BLUE_GLASS = #60A8E8;
+    @LightFilter({"minecraft:yellow_stained_glass", "minecraft:yellow_stained_glass_pane"}) const vec3 YELLOW_GLASS = #F0E040;
+    @LightFilter({"minecraft:lime_stained_glass", "minecraft:lime_stained_glass_pane"}) const vec3 LIME_GLASS = #80D030;
+    @LightFilter({"minecraft:pink_stained_glass", "minecraft:pink_stained_glass_pane"}) const vec3 PINK_GLASS = #F090B0;
+    @LightFilter({"minecraft:gray_stained_glass", "minecraft:gray_stained_glass_pane"}) const vec3 GRAY_GLASS = #505050;
+    @LightFilter({"minecraft:light_gray_stained_glass", "minecraft:light_gray_stained_glass_pane"}) const vec3 LIGHT_GRAY_GLASS = #A0A0A0;
+    @LightFilter({"minecraft:cyan_stained_glass", "minecraft:cyan_stained_glass_pane"}) const vec3 CYAN_GLASS = #30A0B0;
+    @LightFilter({"minecraft:purple_stained_glass", "minecraft:purple_stained_glass_pane"}) const vec3 PURPLE_GLASS = #8040C0;
+    @LightFilter({"minecraft:blue_stained_glass", "minecraft:blue_stained_glass_pane"}) const vec3 BLUE_GLASS = #3050C0;
+    @LightFilter({"minecraft:brown_stained_glass", "minecraft:brown_stained_glass_pane"}) const vec3 BROWN_GLASS = #805030;
+    @LightFilter({"minecraft:green_stained_glass", "minecraft:green_stained_glass_pane"}) const vec3 GREEN_GLASS = #508030;
+    @LightFilter({"minecraft:red_stained_glass", "minecraft:red_stained_glass_pane"}) const vec3 RED_GLASS = #C03030;
+    @LightFilter({"minecraft:black_stained_glass", "minecraft:black_stained_glass_pane"}) const vec3 BLACK_GLASS = #202020;
+    @LightFilter("minecraft:tinted_glass") const vec3 TINTED_GLASS = #303038;
+
+    @Output Texture normals;
+    @Output(format = RGBA8) Texture surface;
+
+    @Target(scale = 0.5) Texture occlusion;
+    @Target(scale = 0.5) Texture occlusionSoft;
+    @Target(scale = 0.5) Texture clouds;
+    @Target(scale = 0.5) Texture shafts;
+    @Target(persistent = true) Texture history;
+    @Target(scale = 0.5) Texture bloom1;
+    @Target(scale = 0.25) Texture bloom2;
+    @Target(scale = 0.125) Texture bloom3;
+    @Target(scale = 0.0625) Texture bloom4;
+    @Target(scale = 0.03125) Texture bloom5;
+    @Target(scale = 0.0625) Texture glow4;
+    @Target(scale = 0.125) Texture glow3;
+    @Target(scale = 0.25) Texture glow2;
+    @Target(scale = 0.5) Texture glow1;
+    @Target(width = 1, height = 1, persistent = true) Texture exposure;
+
+    float dither(vec2 pixel) {
+        return fract(random(floor(pixel)) + float(frameCounter % 64) * 0.618034);
+    }
+
+    void sway(Vertex v) {
+        vec3 p = v.worldPos;
+        float t = time * (0.8 + wind * 0.6);
+        float strength = wind * (1.0 + rain * 1.5);
+
+        if (v.material == Surface.LEAVES) {
+            v.position += vec3(sin(t * 1.7 + p.x * 0.6 + p.y), sin(t * 1.3 + p.z * 0.6) * 0.4, cos(t * 1.5 + p.z * 0.5 + p.y)) * 0.03 * strength;
+        } else if ((v.material == Surface.PLANTS || v.material == Surface.EMISSIVE_PARTS) && v.top) {
+            float gust = 0.6 + 0.4 * noise(p.xz * 0.15 + time * 0.3);
+            v.position.xz += vec2(sin(t * 2.0 + p.x + p.z * 0.5), cos(t * 1.7 + p.z + p.x * 0.3)) * 0.1 * strength * gust;
+        } else if (v.material == Surface.VINES) {
+            v.position.xz += vec2(sin(t * 1.4 + p.y * 0.8 + p.x), cos(t * 1.2 + p.y * 0.7 + p.z)) * 0.025 * strength;
+        } else if ((v.material == Surface.WATER || v.material == Surface.LILY) && v.top) {
+            v.position.y += (sin(t * 1.5 + p.x * 0.8) * cos(t * 1.1 + p.z * 0.7) - 1.0) * 0.03 * wind;
+        } else if (v.material == Surface.LAVA && v.top) {
+            v.position.y += (sin(time * 0.6 + p.x * 0.5 + p.z * 0.4) - 1.0) * 0.02;
+        }
+    }
+
+    @Vertex(TERRAIN)
+    void move(Vertex v) {
+        sway(v);
+    }
+
+    @Vertex(SHADOW)
+    void moveShadow(Vertex v) {
+        if (v.material > 0) {
+            sway(v);
+        }
+    }
+
+    @Fragment(SHADOW)
+    vec4 caster(Fragment f) {
+        if (f.material == Surface.WATER) {
+            return vec4(Water.caustics(f.worldPos), 1.0);
+        }
+
+        if (f.material == Surface.ICE) {
+            return vec4(0.38, 0.44, 0.5, 0.8);
+        }
+
+        if (f.material == Surface.GLASS) {
+            vec4 average = Surface.spriteAverage(f.uv);
+            float bright = max(average.r, max(average.g, average.b));
+            float colorful = smoothstep(0.12, 0.3, (bright - min(average.r, min(average.g, average.b))) / max(bright, 0.01));
+            vec3 tint = mix(vec3(0.12), mix(vec3(1.0), average.rgb / max(bright, 0.01), 0.7) * 0.8, colorful);
+            return vec4(tint * 0.5, min(smoothstep(0.02, 0.6, f.albedo.a), 0.99));
+        }
+
+        if (f.albedo.a < 0.98) {
+            return vec4(f.albedo.rgb * 0.5, smoothstep(0.0, 0.6, f.albedo.a));
+        }
+
+        return f.albedo;
+    }
+
+    @Fragment(value = {TERRAIN, BLOCK}, fog = false)
+    vec4 world(Fragment f) {
+        float d = dither(toScreen(f.position) * screenSize);
+
+        if (f.material == Surface.WATER) {
+            vec3 waterNormal = f.normal.y > 0.5 ? Water.normal(f.worldPos) : f.normal;
+            write(normals, vec4(waterNormal, 1.0));
+            write(surface, vec4(1.0, 0.02, f.skyLight, 1.0 / 255.0));
+            return Water.shade(f.position, f.worldPos, f.normal, f.tint, f.skyLight, f.blockLight, shadowRange, d);
+        }
+
+        Surface.Info s = Surface.describe(f.material, f.texture, f.tint, f.normal, f.position, f.worldPos, f.uv, f.ao, f.skyLight, f.blockLight, true);
+        vec3 lit = Lighting.light(s, f.position, f.worldPos, f.normal, shadowRange, d, false);
+        float alpha = f.albedo.a;
+
+        float f0 = s.f0;
+
+        if (f.material == Surface.GLASS || f.material == Surface.ICE) {
+            float wet = wetness * smoothstep(0.85, 0.95, f.skyLight) * Surface.puddles;
+            f0 = mix(f0, 0.18, wet);
+            vec3 view = normalize(f.position);
+            float fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(-view, s.normal), 0.0), 5.0);
+            vec3 bounce = reflect(view, s.normal);
+            vec3 mirrored = Sky.full(normalize(vec3(bounce.x, max(bounce.y, 0.02), bounce.z))) * smoothstep(0.5, 1.0, f.skyLight);
+            lit = mix(lit, mirrored, fresnel * mix(0.6, 0.9, wet));
+            alpha = mix(alpha, 1.0, fresnel * 0.5);
+        }
+
+        bool foliage = f.material == Surface.LEAVES || f.material == Surface.PLANTS || f.material == Surface.TALL_PLANTS || f.material == Surface.VINES
+                || f.material == Surface.EMISSIVE_PARTS;
+        write(normals, vec4(s.normal, 1.0));
+        write(surface, vec4(s.smoothness, f0, f.skyLight, (foliage ? 3.0 : 0.0) / 255.0));
+        return vec4(lit, alpha);
+    }
+
+    @Fragment(value = {ENTITY, ITEM}, fog = false)
+    vec4 things(Fragment f) {
+        if (f.unlit) {
+            write(normals, vec4(f.normal, 1.0));
+            write(surface, vec4(0.0, 0.0, f.skyLight, 0.0));
+            return vec4((f.albedo.rgb + f.emission) * 2.0, f.vanilla.a);
+        }
+
+        float d = dither(toScreen(f.position) * screenSize);
+        vec3 base = (f.vanilla.rgb - f.emission) / max(f.lightmap.rgb, vec3(0.04));
+        vec3 normal = f.hasMaterial ? f.mappedNormal : f.normal;
+        Surface.Info s = Surface.describe(0, vec4(base, 1.0), vec3(1.0), normal, f.position, f.worldPos, f.uv, 1.0, f.skyLight, f.blockLight, false);
+        float smoothness = 0.1;
+        float f0 = 0.04;
+
+        if (f.hasMaterial) {
+            smoothness = 1.0 - f.roughness;
+            f0 = f.metallic > 0.0 ? mix(0.04, 0.8, f.metallic) : max(f.specular.r, max(f.specular.g, f.specular.b));
+            s = Surface.withMaterial(s, normal, smoothness, f0);
+        }
+
+        vec3 lit = Lighting.light(s, f.position, f.worldPos, f.normal, shadowRange, d, f.isHand) + f.emission * 4.0;
+        write(normals, vec4(normal, 1.0));
+        write(surface, vec4(smoothness, f0, f.skyLight, (f.isHand ? 2.0 : 0.0) / 255.0));
+        return vec4(lit, f.vanilla.a);
+    }
+
+    @Fragment(value = PARTICLE, fog = false)
+    vec4 particles(Fragment f) {
+        if (f.blockLight >= 0.99) {
+            return vec4(f.albedo.rgb * 3.0, f.albedo.a);
+        }
+
+        vec3 light = dimension == OVERWORLD
+                ? Palette.skyAmbient(vec3(0.0, 1.0, 0.0)) * f.skyLight * f.skyLight + Palette.directLight() * 0.4 * f.skyLight * (1.0 - Clouds.shadow(f.worldPos))
+                : Palette.dimensionAmbient();
+        light += Lighting.block(f.worldPos, vec3(0.0, 1.0, 0.0), f.blockLight) + Palette.caveLight();
+        return vec4(f.albedo.rgb * light, f.albedo.a);
+    }
+
+    @Fragment(value = SKY, fog = false)
+    vec4 sky(Fragment f) {
+        if (dimension == END) {
+            return f.part == END_SKY ? vec4(Sky.end(f.direction), 1.0) : f.vanilla;
+        }
+
+        if (dimension != OVERWORLD) {
+            return f.vanilla;
+        }
+
+        if (f.part == SKY) {
+            return vec4(Sky.full(f.direction), 1.0);
+        }
+
+        if (f.part == SUN) {
+            return vec4(f.vanilla.rgb * Palette.sunColor() * 3.0 * (1.0 - rain), f.vanilla.a);
+        }
+
+        if (f.part == MOON) {
+            return vec4(f.vanilla.rgb * Palette.moonColor() * 12.0 * (1.0 - rain), f.vanilla.a);
+        }
+
+        if (f.part == STARS) {
+            return vec4(f.vanilla.rgb * 1.5, f.vanilla.a);
+        }
+
+        return vec4(0.0);
+    }
+
+    @Fragment(CLOUDS)
+    vec4 flatClouds(Fragment f) {
+        if (dimension == OVERWORLD) {
+            discard;
+        }
+
+        return f.vanilla;
+    }
+
+    @Pass(stage = DEFERRED, output = occlusion)
+    vec4 findOcclusion(vec2 uv) {
+        return vec4(Post.ambientOcclusion(uv, normals, dither(uv * screenSize)));
+    }
+
+    @Pass(stage = DEFERRED, output = occlusionSoft)
+    vec4 blurOcclusion(vec2 uv) {
+        return vec4(Post.smoothOcclusion(occlusion, uv));
+    }
+
+    @Pass(stage = DEFERRED, output = clouds)
+    vec4 cloudLayer(vec2 uv) {
+        vec3 position = relativePos(uv);
+        return Clouds.march(normalize(position), isSky(uv) ? 100000.0 : length(position), dither(uv * screenSize));
+    }
+
+    @Pass(stage = DEFERRED)
+    vec4 solidWorld(vec2 uv) {
+        return vec4(Post.solidWorld(uv, occlusionSoft, clouds, normals, surface, dither(uv * screenSize)), 1.0);
+    }
+
+    @Pass(output = shafts)
+    vec4 lightShafts(vec2 uv) {
+        return vec4(Post.lightShafts(uv, shadowRange, dither(uv * screenSize)), 1.0);
+    }
+
+    @Pass
+    vec4 haze(vec2 uv) {
+        return vec4(Post.atmosphere(uv, texture(SCREEN, uv).rgb, texture(shafts, uv).rgb), 1.0);
+    }
+
+    @Pass
+    vec4 antiAlias(vec2 uv) {
+        return vec4(Post.temporal(uv, history, surface), 1.0);
+    }
+
+    @Pass(output = history)
+    vec4 remember(vec2 uv) {
+        return texture(SCREEN, uv);
+    }
+
+    @Pass(output = bloom1)
+    vec4 bloomStart(vec2 uv) {
+        return vec4(Post.bright(uv), 1.0);
+    }
+
+    @Pass(output = bloom2)
+    vec4 bloomDown2(vec2 uv) {
+        return vec4(Post.down(bloom1, uv), 1.0);
+    }
+
+    @Pass(output = bloom3)
+    vec4 bloomDown3(vec2 uv) {
+        return vec4(Post.down(bloom2, uv), 1.0);
+    }
+
+    @Pass(output = bloom4)
+    vec4 bloomDown4(vec2 uv) {
+        return vec4(Post.down(bloom3, uv), 1.0);
+    }
+
+    @Pass(output = bloom5)
+    vec4 bloomDown5(vec2 uv) {
+        return vec4(Post.down(bloom4, uv), 1.0);
+    }
+
+    @Pass(output = glow4)
+    vec4 bloomUp4(vec2 uv) {
+        return vec4(Post.up(bloom5, bloom4, uv), 1.0);
+    }
+
+    @Pass(output = glow3)
+    vec4 bloomUp3(vec2 uv) {
+        return vec4(Post.up(glow4, bloom3, uv), 1.0);
+    }
+
+    @Pass(output = glow2)
+    vec4 bloomUp2(vec2 uv) {
+        return vec4(Post.up(glow3, bloom2, uv), 1.0);
+    }
+
+    @Pass(output = glow1)
+    vec4 bloomUp1(vec2 uv) {
+        return vec4(Post.up(glow2, bloom1, uv), 1.0);
+    }
+
+    @Pass(output = exposure)
+    vec4 adapt(vec2 uv) {
+        return Post.meter(history, exposure);
+    }
+
+    @Pass
+    vec4 grade(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb + Post.sunGlare(uv, clouds);
+        return vec4(Post.finish(uv, color, texture(glow1, uv).rgb / 5.0, texture(exposure, vec2(0.5)).r), 1.0);
+    }
+}

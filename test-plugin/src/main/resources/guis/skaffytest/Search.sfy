@@ -1,0 +1,33 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class Search {
+    Box results;
+    Text count;
+
+    @Gui
+    public void main() {
+        tint(#90000000);
+        Box panel = add(box().pos(50% - 130, 40).size(260, 100% - 80).color(#F0181A1F).radius(8).padding(10).column(8));
+        panel.add(text("Find a player").fontSize(12).bold(true));
+        Field search = panel.add(field().width(100%).placeholder(mini("<gray><italic>Start typing a name...")).autoFocus(true));
+        count = panel.add(text("").color(#888888));
+        results = panel.add(box().column(3).width(100%).height(100% - 70).scroll(true));
+        search.onChange(150ms, value -> send("search", value));
+        send("search", "");
+    }
+
+    public void showResults(List<String> names) {
+        results.clear();
+        count.text(names.size() + (names.size() == 1 ? " player" : " players"));
+
+        for (String name : names) {
+            Box row = results.add(box().row(6).alignItems(CENTER).width(100%).padding(3, 5).radius(4).color(#10FFFFFF).cursor(HAND));
+            row.hover().color(#30FFFFFF);
+            row.add(head(name).size(16, 16).radius(2));
+            row.add(text(name));
+            row.onClick(() -> send("pick", name));
+        }
+    }
+}

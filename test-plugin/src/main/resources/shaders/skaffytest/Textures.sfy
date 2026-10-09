@@ -1,0 +1,21 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Textures {
+    @Texture("skaffytest_noise.png") Texture grain;
+    @Texture(value = "minecraft:misc/vignette", wrap = CLAMP) Texture vignette;
+
+    @Uniform float grainStrength = 0.14;
+
+    @Pass
+    vec4 film(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        float frame = floor(time * 24.0);
+        vec2 jitter = vec2(random(vec2(frame, 1.0)), random(vec2(frame, 2.0)));
+        float noiseValue = texture(grain, uv * screenSize / 128.0 + jitter).r - 0.5;
+        color += noiseValue * grainStrength;
+        color *= 1.0 - texture(vignette, uv).r * 0.75;
+        return vec4(clamp(color, 0.0, 1.0), 1.0);
+    }
+}

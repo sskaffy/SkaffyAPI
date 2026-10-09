@@ -1,0 +1,96 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class Clouds {
+    @Uniform float shadows = 0.7;
+    @Uniform float thickness = 14.0;
+    @Uniform float softness = 1.0;
+    @Uniform float brightness = 1.0;
+
+    @Texture(value = "vista_noise.png", filter = LINEAR) Texture noise;
+
+    float phase(float cosine, float g) {
+        float g2 = g * g;
+        return (1.0 - g2) / (4.0 * PI * pow(1.0 + g2 - 2.0 * g * cosine, 1.5));
+    }
+
+    float shadow(vec3 world) {
+        return dimension == OVERWORLD ? cloudShadow(world) * shadows : 0.0;
+    }
+
+    float bottom() {
+        return cloudHeight - 2.0;
+    }
+
+    float cover(vec3 world, float blur) {
+        float r = max(5.0 * softness, blur);
+        return cloudCover(world) * 0.36 + (cloudCover(world + vec3(r, 0.0, 0.0)) + cloudCover(world - vec3(r, 0.0, 0.0))
+                + cloudCover(world + vec3(0.0, 0.0, r)) + cloudCover(world - vec3(0.0, 0.0, r))) * 0.16;
+    }
+
+    float density(vec3 world, float cover) {
+        float height = (world.y - bottom()) / thickness;
+        float profile = smoothstep(0.0, 0.3, height) * smoothstep(1.0, 0.5, height);
+        float detail = texture(noise, world.xz / 70.0 + vec2(time * 0.004, 0.0)).g - 0.5;
+        return smoothstep(0.3, 0.7, cover * profile + detail * 0.12) * 1.4;
+    }
+
+    vec4 march(vec3 direction, float limit, float dither) {
+        if (dimension != OVERWORLD || abs(direction.y) < 0.0001) {
+            return vec4(0.0, 0.0, 0.0, 1.0);
+        }
+
+        float toBottom = (bottom() - cameraPosition.y) / direction.y;
+        float toTop = (bottom() + thickness - cameraPosition.y) / direction.y;
+        float enter = max(min(toBottom, toTop), 0.0);
+        float leave = min(max(toBottom, toTop), limit);
+
+        float cloudsEnd = clamp(effectDistance * 5.0, 300.0, 1300.0);
+
+        if (leave <= enter || enter > cloudsEnd) {
+            return vec4(0.0, 0.0, 0.0, 1.0);
+        }
+
+        const int STEPS = 24;
+        float stepLength = min(leave - enter, 900.0) / float(STEPS);
+        float blur = stepLength * 0.7;
+        float t = enter + stepLength * dither;
+        float cosine = dot(direction, lightDirection);
+        float scatter = phase(cosine, 0.6) * 0.7 + phase(cosine, -0.25) * 0.3;
+        vec3 light = Palette.directLight() * 5.5;
+        vec3 ambient = Palette.skyAmbient(vec3(0.0, 1.0, 0.0)) * 1.1;
+        float transmittance = 1.0;
+        vec3 color = vec3(0.0);
+
+        for (int i = 0; i < STEPS; i++) {
+            vec3 world = cameraPosition + direction * t;
+            float here = cover(world, blur);
+
+            if (here > 0.02) {
+                float d = density(world, here);
+
+                if (d > 0.0) {
+                    vec3 sunward = world + lightDirection * 8.0;
+                    float towardsLight = density(sunward, cloudCover(sunward)) + density(world + lightDirection * 20.0, cloudCover(world + lightDirection * 20.0)) * 0.7;
+                    float lit = exp(-towardsLight * 1.4);
+                    float powder = 1.0 - exp(-d * 2.5);
+                    float up = clamp((world.y - bottom()) / thickness, 0.0, 1.0);
+                    vec3 inLight = light * lit * scatter * powder * 2.0 + ambient * (0.45 + 0.55 * up);
+                    float absorbed = exp(-d * 0.09 * stepLength);
+                    color += transmittance * inLight * (1.0 - absorbed);
+                    transmittance *= absorbed;
+
+                    if (transmittance < 0.02) {
+                        break;
+                    }
+                }
+            }
+
+            t += stepLength;
+        }
+
+        float fade = 1.0 - smoothstep(cloudsEnd * 0.4, cloudsEnd, enter);
+        return vec4(color * fade * brightness, mix(1.0, transmittance, fade));
+    }
+}

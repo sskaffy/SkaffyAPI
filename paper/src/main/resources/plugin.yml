@@ -1,0 +1,18 @@
+name: SkaffysAPI
+version: '${version}'
+main: me.skaffy.paper.SkaffyPlugin
+api-version: '26.3'
+description: Client sided APIs for servers.
+authors: [Skaffy]
+website: https://github.com/sskaffy/SkaffyAPI
+folia-supported: true
+
+commands:
+  skaffy-api:
+    description: Shows which players use Skaffy's API.
+    permission: skaffy-api.command
+
+permissions:
+  skaffy-api.command:
+    description: Allows /skaffy-api
+    default: op

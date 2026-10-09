@@ -1,0 +1,194 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "SFY",
+	"scopeName": "source.sfy",
+	"fileTypes": [
+		"sfy"
+	],
+	"patterns": [
+		{
+			"include": "#comments"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#literals"
+		},
+		{
+			"include": "#annotations"
+		},
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#types"
+		},
+		{
+			"include": "#calls"
+		},
+		{
+			"include": "#constants"
+		},
+		{
+			"include": "#operators"
+		}
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.block.sfy",
+					"begin": "/\\*",
+					"end": "\\*/"
+				},
+				{
+					"name": "comment.line.double-slash.sfy",
+					"match": "//.*$"
+				}
+			]
+		},
+		"strings": {
+			"patterns": [
+				{
+					"name": "string.quoted.triple.sfy",
+					"begin": "\"\"\"",
+					"end": "\"\"\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.sfy",
+							"match": "\\\\."
+						}
+					]
+				},
+				{
+					"name": "string.quoted.double.sfy",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.sfy",
+							"match": "\\\\(u+[0-9a-fA-F]{4}|.)"
+						}
+					]
+				},
+				{
+					"name": "string.quoted.single.sfy",
+					"match": "'(\\\\(u+[0-9a-fA-F]{4}|.)|[^'\\\\])'"
+				}
+			]
+		},
+		"literals": {
+			"patterns": [
+				{
+					"name": "constant.other.color.sfy",
+					"match": "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})\\b"
+				},
+				{
+					"name": "constant.numeric.percent.sfy",
+					"match": "\\b\\d[\\d_]*(?:\\.\\d+)?%"
+				},
+				{
+					"name": "constant.numeric.duration.sfy",
+					"match": "\\b\\d[\\d_]*(?:\\.\\d+)?(?:ms|s)\\b"
+				},
+				{
+					"name": "constant.numeric.hex.sfy",
+					"match": "\\b0[xX][0-9a-fA-F_]+[lL]?\\b"
+				},
+				{
+					"name": "constant.numeric.binary.sfy",
+					"match": "\\b0[bB][01_]+[lL]?\\b"
+				},
+				{
+					"name": "constant.numeric.sfy",
+					"match": "\\b\\d[\\d_]*(?:\\.\\d*)?(?:[eE][+-]?\\d+)?[lLdDfF]?\\b"
+				},
+				{
+					"name": "constant.language.sfy",
+					"match": "\\b(?:true|false|null)\\b"
+				}
+			]
+		},
+		"annotations": {
+			"patterns": [
+				{
+					"name": "storage.type.annotation.sfy",
+					"match": "@[A-Za-z_][A-Za-z0-9_]*"
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.other.package.sfy",
+					"match": "\\b(?:package|import)\\b"
+				},
+				{
+					"name": "storage.modifier.sfy",
+					"match": "\\b(?:public|private|protected|static|final|const)\\b"
+				},
+				{
+					"name": "storage.type.sfy",
+					"match": "\\b(?:class|record|enum|var|void|int|long|double|boolean|char|float|bool|[ib]?vec[234]|mat[234])\\b"
+				},
+				{
+					"name": "keyword.control.sfy",
+					"match": "\\b(?:if|else|for|while|do|switch|case|default|break|continue|return|yield|try|catch|finally|throw|discard)\\b"
+				},
+				{
+					"name": "keyword.other.sfy",
+					"match": "\\b(?:new|instanceof)\\b"
+				},
+				{
+					"name": "variable.language.this.sfy",
+					"match": "\\bthis\\b"
+				},
+				{
+					"name": "support.variable.logger.sfy",
+					"match": "\\bLOGGER\\b"
+				}
+			]
+		},
+		"types": {
+			"patterns": [
+				{
+					"name": "support.class.builtin.sfy",
+					"match": "\\b(?:String|Object|Integer|Long|Double|Boolean|Character|List|Map|ArrayList|HashMap|Math|Exception|Color|Length|Duration|Runnable|Consumer|BiConsumer|Supplier|Function|Predicate|Comparator|Element|Box|Text|Image|Head|Item|EntityView|Field|Button|Slider|Canvas|Graphics|VanillaButton|VanillaField|VanillaSlider|Checkbox|CycleButton|Style|Animation|Timer|MouseEvent|ScrollEvent|KeyEvent|DropEvent|RichText|Align|Justify|TextAlign|Cursor|Easing|ImageMode|ScrollbarStyle|Font|Allow|Axis|MouseButton|Blend|BossBar|Sidebar|SidebarLine|Effect|Texture|Vertex|Fragment)\\b"
+				},
+				{
+					"name": "entity.name.type.sfy",
+					"match": "\\b[A-Z][a-z][A-Za-z0-9_]*\\b"
+				}
+			]
+		},
+		"calls": {
+			"patterns": [
+				{
+					"name": "entity.name.function.sfy",
+					"match": "\\b[a-z_][A-Za-z0-9_]*(?=\\s*\\()"
+				}
+			]
+		},
+		"constants": {
+			"patterns": [
+				{
+					"name": "variable.other.constant.sfy",
+					"match": "\\b[A-Z][A-Z0-9_]+\\b"
+				}
+			]
+		},
+		"operators": {
+			"patterns": [
+				{
+					"name": "keyword.operator.arrow.sfy",
+					"match": "->"
+				},
+				{
+					"name": "keyword.operator.sfy",
+					"match": "[=!<>]=|&&|\\|\\||\\+\\+|--|[-+*/%&|^~!<>=?:]"
+				}
+			]
+		}
+	}
+}

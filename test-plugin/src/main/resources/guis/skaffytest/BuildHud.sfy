@@ -1,0 +1,137 @@
+package skaffytest;
+
+import skaffy.gui.*;
+
+public class BuildHud {
+    static final List<String> PIECES = List.of("Wall", "Floor", "Ramp", "Cone");
+    static final List<String> KEYS = List.of("Q", "F", "C", "V");
+    static final List<String> MATERIALS = List.of("minecraft:oak_planks", "minecraft:bricks", "minecraft:iron_block");
+
+    Box buildBar;
+    List<Box> slots = new ArrayList<>();
+    List<Box> materialRows = new ArrayList<>();
+    List<Text> materialCounts = new ArrayList<>();
+    Box target;
+    Text targetName;
+    Text targetHealth;
+    Box targetFill;
+    Text hint;
+    int piece = 0;
+    int material = 0;
+
+    @Hud
+    public void main() {
+        add(canvas(g -> {
+            g.ring(9, 9, 3, 1, #FFFFFFFF);
+            g.line(9, 0, 9, 3.5, 1, #FFFFFFFF);
+            g.line(9, 14.5, 9, 18, 1, #FFFFFFFF);
+            g.line(0, 9, 3.5, 9, 1, #FFFFFFFF);
+            g.line(14.5, 9, 18, 9, 1, #FFFFFFFF);
+        }).size(18, 18).pos(50% - 9, 50% - 9).blend(INVERT));
+
+        buildBar = add(box().pos(50% - 82, 100% - 44).row(4).hide());
+
+        for (int i = 0; i < 4; i++) {
+            int index = i;
+            Box slot = buildBar.add(box().size(38, 38).color(#90101418).radius(4).border(1, #50FFFFFF));
+            slot.add(canvas(g -> icon(g, index)).size(24, 24).pos(7, 3));
+            slot.add(text(KEYS.get(i)).fontSize(7).color(#FFE8E8E8).pos(3, 28));
+            slots.add(slot);
+        }
+
+        Box materials = add(box().pos(100% - 70, 100% - 76).column(3));
+
+        for (int i = 0; i < 3; i++) {
+            Box row = materials.add(box().row(4).alignItems(CENTER).padding(2, 5).radius(3).color(#70101418));
+            row.add(item(MATERIALS.get(i)).size(14, 14).itemTooltip(false));
+            materialCounts.add(row.add(text("999").fontSize(8)));
+            materialRows.add(row);
+        }
+
+        target = add(box().pos(50% - 50, 50% + 14).size(100, 22).column(2).alignItems(CENTER).hide());
+        targetName = target.add(text("").fontSize(7).color(#FFE0E0E0));
+        Box track = target.add(box().size(90, 5).color(#A0101418).radius(2));
+        targetFill = track.add(box().size(90, 5).color(#FF4FD1FF).radius(2));
+        targetHealth = target.add(text("").fontSize(6).color(#FFB0B0B0));
+
+        hint = add(text("Hold left click on tiles to select them · release to confirm · right click resets").fontSize(7)
+                .color(#FFFFFFFF).pos(50% - 150, 100% - 60).width(300).align(CENTER).hide());
+
+        update();
+    }
+
+    static void icon(Graphics g, int index) {
+        Color c = #FFFFFFFF;
+
+        switch (index) {
+            case 0 -> {
+                g.line(4, 3, 20, 3, 1.5, c);
+                g.line(20, 3, 20, 21, 1.5, c);
+                g.line(20, 21, 4, 21, 1.5, c);
+                g.line(4, 21, 4, 3, 1.5, c);
+                g.line(4, 9, 20, 9, 1, #90FFFFFF);
+                g.line(4, 15, 20, 15, 1, #90FFFFFF);
+            }
+            case 1 -> {
+                g.line(2, 17, 14, 21, 1.5, c);
+                g.line(14, 21, 22, 13, 1.5, c);
+                g.line(22, 13, 10, 9, 1.5, c);
+                g.line(10, 9, 2, 17, 1.5, c);
+            }
+            case 2 -> {
+                g.line(3, 21, 21, 21, 1.5, c);
+                g.line(21, 21, 21, 3, 1.5, c);
+                g.line(21, 3, 3, 21, 1.5, c);
+            }
+            default -> {
+                g.line(2, 19, 12, 5, 1.5, c);
+                g.line(12, 5, 22, 19, 1.5, c);
+                g.line(22, 19, 2, 19, 1.5, c);
+                g.line(12, 5, 12, 19, 1, #90FFFFFF);
+            }
+        }
+    }
+
+    void update() {
+        for (int i = 0; i < slots.size(); i++) {
+            slots.get(i).color(i == piece ? #C03399FF : #90101418).border(i == piece ? 1.5 : 1, i == piece ? #FFFFFFFF : #50FFFFFF);
+        }
+
+        for (int i = 0; i < materialRows.size(); i++) {
+            materialRows.get(i).color(i == material ? #C03399FF : #70101418);
+        }
+    }
+
+    public void setMode(String mode) {
+        buildBar.visible(mode == "build" || mode == "edit");
+        hint.visible(mode == "edit");
+    }
+
+    public void setPiece(int index) {
+        piece = index;
+        update();
+    }
+
+    public void setMaterial(int index) {
+        material = index;
+        update();
+    }
+
+    public void setMaterials(int wood, int brick, int metal) {
+        materialCounts.get(0).text(String.valueOf(wood));
+        materialCounts.get(1).text(String.valueOf(brick));
+        materialCounts.get(2).text(String.valueOf(metal));
+    }
+
+    public void setTarget(String name, int health, int max) {
+        target.show();
+        targetName.text(name);
+        targetHealth.text(health + " / " + max);
+        double part = Math.clamp(health * 1.0 / max, 0.0, 1.0);
+        targetFill.width(90 * part).color(part > 0.5 ? #FF4FD1FF : part > 0.25 ? #FFFFC94F : #FFFF5F5F);
+    }
+
+    public void clearTarget() {
+        target.hide();
+    }
+}
