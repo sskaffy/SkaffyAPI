@@ -18,6 +18,7 @@ public final class SfyLibrary {
 	BiConsumer<SfyInstance, String> guiSwitch;
 	BiConsumer<String, String> logSink = (level, message) -> {
 	};
+	java.util.function.Function<String, Object> classLiteral = name -> name;
 
 	public SfyLibrary() {
 		Stdlib.install(this);
@@ -29,6 +30,10 @@ public final class SfyLibrary {
 
 	public void onLog(BiConsumer<String, String> sink) {
 		this.logSink = sink;
+	}
+
+	public void onClassLiteral(java.util.function.Function<String, Object> factory) {
+		this.classLiteral = factory;
 	}
 
 	public void library(String packageName) {
@@ -49,6 +54,15 @@ public final class SfyLibrary {
 		ClassInfo info = declare(declaration, ClassInfo.Kind.NATIVE);
 		info.javaClass = javaClass;
 		pending.add(() -> info.superClass = info.name.equals("Object") ? null : classes.get(superName == null ? "Object" : superName));
+	}
+
+	public void extensibleType(String name, Class<?> javaClass) {
+		type(name, null, javaClass);
+		classes.get(name).extensible = true;
+	}
+
+	String libraryPackage() {
+		return library;
 	}
 
 	public void valueType(String name, Class<?> javaClass) {

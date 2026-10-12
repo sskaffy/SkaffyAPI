@@ -1,0 +1,19 @@
+package skaffy.vista;
+
+import skaffy.shader.*;
+
+public class VistaShader extends Shader {
+    public void onEnable() {
+        name("Vista");
+        icon("icon.png");
+        author("Skaffy");
+        version("1.1");
+        description("Skaffy's API's own shader: soft shadows, colored light, reflections, puddles, soft clouds and more.");
+        license("Part of Skaffy's API (see its LICENSE)");
+        link("GitHub", "https://github.com/sskaffy/SkaffyAPI");
+        register(Vista.class);
+    }
+
+    public void onDisable() {
+    }
+}

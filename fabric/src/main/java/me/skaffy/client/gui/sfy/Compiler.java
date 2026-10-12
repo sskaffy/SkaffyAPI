@@ -39,6 +39,9 @@ final class Compiler {
 	private boolean importAll;
 	private final Set<String> imported = new HashSet<>();
 	private final Set<String> reportedImports = new HashSet<>();
+	Set<String> knownClasses;
+	private final Map<String, String> classImports = new HashMap<>();
+	private String packageName = "";
 
 	private final ClassInfo objectCls;
 	private final ClassInfo stringCls;
@@ -89,6 +92,7 @@ final class Compiler {
 	SfyClass compileFile(String source, String qualifiedName) throws CompileException {
 		Ast.Unit unit = Parser.parseFile(file, source);
 		checkName(unit, qualifiedName);
+		packageName = unit.packageName();
 		checkImports(unit);
 		declareTypes(unit.type());
 		output = new SfyClass(lib, file, unit.packageName(), unit.type().name(), main, userTypes);
@@ -140,11 +144,16 @@ final class Compiler {
 	}
 
 	private void checkImports(Ast.Unit unit) {
+		String own = lib.libraryPackage();
+		boolean gui = "skaffy.gui".equals(own);
+		String other = gui ? "skaffy.shader" : "skaffy.gui";
+		String hint = gui ? "GUI files import skaffy.gui.*" : "a shader pack's main file imports skaffy.shader.*";
 		boolean any = false;
 
 		for (Ast.Import imp : unit.imports()) {
-			if (imp.name().equals("skaffy.shader") || imp.name().startsWith("skaffy.shader.")) {
-				error(imp.pos(), "This file imports skaffy.shader, so it's a shader file; GUI files import skaffy.gui.*");
+			if (imp.name().equals(other) || imp.name().startsWith(other + ".")) {
+				error(imp.pos(), gui ? "This file imports skaffy.shader, so it's a shader file; GUI files import skaffy.gui.*"
+						: "This file imports skaffy.gui, so it's a GUI file; " + hint);
 				continue;
 			}
 
@@ -153,7 +162,7 @@ final class Compiler {
 					importAll = true;
 					any = true;
 				} else {
-					error(imp.pos(), "Unknown import " + imp.name() + ".* (GUI files import skaffy.gui.*)");
+					error(imp.pos(), "Unknown import " + imp.name() + ".* (" + hint + ")");
 				}
 
 				continue;
@@ -163,8 +172,10 @@ final class Compiler {
 			String pkg = dot < 0 ? "" : imp.name().substring(0, dot);
 			String simple = imp.name().substring(dot + 1);
 
-			if (!lib.libraryNames.containsValue(pkg)) {
-				error(imp.pos(), "Unknown import " + imp.name() + " (GUI files import skaffy.gui.* or single names from it)");
+			if (knownClasses != null && knownClasses.contains(imp.name())) {
+				classImports.put(simple, imp.name());
+			} else if (!lib.libraryNames.containsValue(pkg)) {
+				error(imp.pos(), "Unknown import " + imp.name() + " (" + hint + " or single names from it" + (knownClasses != null ? ", or a class of this pack" : "") + ")");
 			} else if (!pkg.equals(lib.libraryNames.get(simple))) {
 				error(imp.pos(), pkg + " has no " + simple + didYouMean(simple, lib.libraryNames.keySet()));
 			} else {
@@ -174,7 +185,8 @@ final class Compiler {
 		}
 
 		if (!any) {
-			error(unit.packagePos(), "A GUI file needs import skaffy.gui.*; (or single names like import skaffy.gui.Box;) after its package");
+			error(unit.packagePos(), (gui ? "A GUI file needs import skaffy.gui.*; (or single names like import skaffy.gui.Box;)"
+					: "A shader pack's main file needs import skaffy.shader.*; (or single names like import skaffy.shader.Shader;)") + " after its package");
 		}
 	}
 
@@ -210,6 +222,17 @@ final class Compiler {
 	private void declareTypes(Ast.ClassDecl decl) {
 		main = new ClassInfo(decl.name(), ClassInfo.Kind.MAIN, List.of());
 		main.superClass = objectCls;
+
+		if (decl.superName() != null) {
+			ClassInfo parent = lib.find(decl.superName());
+
+			if (parent == null || !parent.extensible) {
+				error(decl.superPos(), "Classes can't extend " + decl.superName() + (lib.classes.values().stream().anyMatch(info -> info.extensible)
+						? " (a shader pack's main file extends Shader)" : " in .sfy"));
+			} else if (requireImport(parent.name, decl.superPos())) {
+				main.superClass = parent;
+			}
+		}
 		userTypes.put(main.name, main);
 		checkBuiltinName(decl.name(), decl.pos());
 
@@ -319,8 +342,10 @@ final class Compiler {
 
 	private void checkAnnotations(Ast.Modifiers modifiers, boolean method) {
 		for (Ast.Annotation annotation : modifiers.annotations()) {
-			if (!(method && (annotation.name().equals("Gui") || annotation.name().equals("Hud") || annotation.name().equals("Override")))) {
-				error(annotation.pos(), "Unknown annotation @" + annotation.name() + (method ? " (only @Gui and @Hud exist)" : ""));
+			boolean known = annotation.name().equals("Override") || lib.libraryNames.containsKey(annotation.name());
+
+			if (!(method && known)) {
+				error(annotation.pos(), "Unknown annotation @" + annotation.name() + (method ? lib.libraryNames.containsKey("Gui") ? " (only @Gui and @Hud exist)" : " (only @Override exists)" : ""));
 			} else if (annotation.name().equals("Gui") || annotation.name().equals("Hud")) {
 				requireImport(annotation.name(), annotation.pos());
 			}
@@ -2086,7 +2111,34 @@ final class Compiler {
 			case Ast.Lambda lambda -> lambda(lambda, expected);
 			case Ast.SwitchExpr choice -> switchExpression(choice, expected);
 			case Ast.This self -> thisExpression(self);
+			case Ast.ClassLit literal -> classLiteral(literal);
 		};
+	}
+
+	private T classLiteral(Ast.ClassLit literal) {
+		ClassInfo classType = lib.find("Class");
+
+		if (knownClasses == null || classType == null) {
+			error(literal.pos(), ".class only works in a shader pack's main file");
+			return bad();
+		}
+
+		String name = literal.name();
+		String qualified = classImports.get(name);
+
+		if (qualified == null) {
+			String samePackage = packageName.isEmpty() ? name : packageName + "." + name;
+			qualified = knownClasses.contains(samePackage) ? samePackage : knownClasses.contains(name) ? name : null;
+		}
+
+		if (qualified == null) {
+			error(literal.pos(), "This pack has no class " + name + didYouMean(name, knownClasses.stream().map(known -> known.substring(known.lastIndexOf('.') + 1)).toList())
+					+ " (classes in other packages need their full name or an import)");
+			return bad();
+		}
+
+		Object value = lib.classLiteral.apply(qualified);
+		return new T(new Type.Ref(classType, List.of()), frame -> value);
 	}
 
 	private T literal(Ast.Literal literal) {

@@ -12,7 +12,6 @@ layout(location = 1) in float alpha;
 layout(location = 0) out vec4 fragColor;
 
 void main() {
-
     if (SkParams.x >= 0.0 && texture(Sampler0, texCoord0).a * alpha < max(SkParams.x, 0.004)) {
         discard;
     }

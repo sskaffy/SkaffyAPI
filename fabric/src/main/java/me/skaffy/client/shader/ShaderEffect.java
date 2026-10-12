@@ -83,6 +83,7 @@ final class ShaderEffect implements AutoCloseable {
 	final Map<String, TargetRuntime> targets = new HashMap<>();
 	final @Nullable MappableRingBuffer uniformBuffer;
 	final UniformValues values;
+	private final FileValues fileValues;
 
 	private final List<Compile> pending = new ArrayList<>();
 	private final List<EffectShaderSource> sources = new ArrayList<>();
@@ -93,7 +94,7 @@ final class ShaderEffect implements AutoCloseable {
 		byte @Nullable [] read(String id) throws IOException;
 
 		static Assets of(@Nullable DiskAssetStore store) {
-			return id -> store != null && store.size(id) >= 0 ? store.read(id) : null;
+			return id -> store != null && Protocol.isValidAssetId(id) && store.size(id) >= 0 ? store.read(id) : null;
 		}
 	}
 
@@ -140,11 +141,12 @@ final class ShaderEffect implements AutoCloseable {
 			RenderPipeline vanilla, PassRuntime pass, boolean optional, boolean shadow, ChunkSectionLayer layer, boolean seeThrough) {
 	}
 
-	ShaderEffect(ShaderModule module, UniformValues values, FrameLayout layout) {
+	ShaderEffect(String key, ShaderModule module, UniformValues values, FrameLayout layout) {
 		this.module = module;
-		this.className = module.className();
+		this.className = key;
 		this.id = nextId++;
 		this.values = values;
+		this.fileValues = new FileValues(module);
 		this.layout = layout;
 		this.uniformBuffer = module.uniformBlockSize() > 0
 				? new MappableRingBuffer(() -> "Skaffy shader uniforms " + className, GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_UNIFORM, module.uniformBlockSize())
@@ -189,15 +191,20 @@ final class ShaderEffect implements AutoCloseable {
 			GpuFormat screen = pass.stage() == Stage.FINAL ? GpuFormat.RGBA8_UNORM : layout.main();
 			GpuFormat format = pass.output() == null ? screen : format(targetOf(pass.output()).target.format());
 			int mask = pass.output() == null ? ColorTargetState.WRITE_COLOR : ColorTargetState.WRITE_ALL;
-			RenderPipeline pipeline = RenderPipeline.builder()
+			RenderPipeline.Builder builder = RenderPipeline.builder()
 					.withLocation(Identifier.fromNamespaceAndPath(WorldPrograms.NAMESPACE, "e" + id + "/pass_" + i + "_" + pass.name().toLowerCase(Locale.ROOT)))
 					.withVertexShader(shader)
 					.withFragmentShader(shader)
 					.withBindGroupLayout(bindings.build())
-					.withColorTargetState(new ColorTargetState(blend(pass.blend()), format, mask))
+					.withColorTargetState(0, new ColorTargetState(blend(pass.blend()), format, mask))
 					.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
-					.withCull(false)
-					.build();
+					.withCull(false);
+
+			for (int j = 0; j < pass.writes().size(); j++) {
+				builder.withColorTargetState(1 + j, new ColorTargetState(Optional.empty(), format(targetOf(pass.writes().get(j)).target.format()), ColorTargetState.WRITE_ALL));
+			}
+
+			RenderPipeline pipeline = builder.build();
 			PassRuntime runtime = new PassRuntime(pass, pipeline);
 			passes.add(runtime);
 			toStart.add(new Compile(pipeline, passSource, null, null, null, runtime, false, false, null, false));
@@ -207,14 +214,14 @@ final class ShaderEffect implements AutoCloseable {
 		List<WorldPrograms.Variant> all = WorldPrograms.all();
 
 		for (WorldPrograms.Variant variant : all) {
-			if (module.hooks().containsKey(variant.program())) {
+			if (hookFor(variant.program()) != null) {
 				variants.computeIfAbsent(variant.program(), key -> new ArrayList<>()).add(variant);
 			}
 		}
 
 		for (Map.Entry<Program, List<WorldPrograms.Variant>> entry : variants.entrySet()) {
 			Program program = entry.getKey();
-			ShaderModule.Hook hook = module.hooks().get(program);
+			ShaderModule.Hook hook = hookFor(program);
 			EffectShaderSource source = hookSource(hook, layout.locations(className));
 			String base = "e" + id + "/" + program.name().toLowerCase(Locale.ROOT);
 			BindGroupLayout extra = bindings(hook);
@@ -281,6 +288,12 @@ final class ShaderEffect implements AutoCloseable {
 		SkaffySAPIClient.LOGGER.info("Building shader {}: {} passes, {} world pipelines", className, passes.size(), pending.size() - passes.size());
 	}
 
+	private ShaderModule.@Nullable Hook hookFor(Program program) {
+		ShaderModule.Hook hook = module.hooks().get(program);
+		Program fallback = Builtins.fallback(program);
+		return hook != null || fallback == null ? hook : module.hooks().get(fallback);
+	}
+
 	private EffectShaderSource hookSource(ShaderModule.Hook hook, Map<String, Integer> locations) {
 		EffectShaderSource source = new EffectShaderSource(includes, false);
 		sources.add(source);
@@ -316,7 +329,11 @@ final class ShaderEffect implements AutoCloseable {
 	}
 
 	static GpuFormat format(Builtins.Format format) {
-		return format == Builtins.Format.RGBA8 ? GpuFormat.RGBA8_UNORM : GpuFormat.RGBA16_FLOAT;
+		return switch (format) {
+			case RGBA8 -> GpuFormat.RGBA8_UNORM;
+			case RGBA16F -> GpuFormat.RGBA16_FLOAT;
+			case RGBA32F -> GpuFormat.RGBA32_FLOAT;
+		};
 	}
 
 	private static Optional<BlendFunction> blend(Builtins.Blend blend) {
@@ -471,7 +488,7 @@ final class ShaderEffect implements AutoCloseable {
 						}
 					}
 				}
-			} else if (Protocol.isValidAssetId(source.source())) {
+			} else {
 				png = assets.read(source.source());
 			}
 		} catch (IOException e) {
@@ -490,10 +507,10 @@ final class ShaderEffect implements AutoCloseable {
 				device.createCommandEncoder().writeToTexture(texture, image);
 				return new Sampled(texture, device.createTextureView(texture), sampler);
 			} catch (IOException | RuntimeException e) {
-				ClientShaders.report(className, me.skaffy.protocol.shaders.ShadersPacket.ErrorKind.REQUEST, "Texture " + source.name() + " (" + source.source() + ") isn't a readable PNG: " + e.getMessage());
+				ShaderRenderer.report(className, me.skaffy.protocol.shaders.ShadersPacket.ErrorKind.REQUEST, "Texture " + source.name() + " (" + source.source() + ") isn't a readable PNG: " + e.getMessage());
 			}
 		} else {
-			ClientShaders.report(className, me.skaffy.protocol.shaders.ShadersPacket.ErrorKind.REQUEST, "Texture " + source.name() + ": " + source.source()
+			ShaderRenderer.report(className, me.skaffy.protocol.shaders.ShadersPacket.ErrorKind.REQUEST, "Texture " + source.name() + ": " + source.source()
 					+ (source.source().contains(":") ? " isn't a vanilla texture" : " isn't an asset the client has"));
 		}
 
@@ -509,6 +526,7 @@ final class ShaderEffect implements AutoCloseable {
 
 
 	void writeUniforms(long now) {
+		fileValues.update(values);
 		values.tick(now);
 
 		if (uniformBuffer == null || !values.consumeDirty()) {

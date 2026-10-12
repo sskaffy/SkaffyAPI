@@ -15,8 +15,12 @@ public final class ShaderCompiler {
 	}
 
 	public static Result compile(String className, String source, Function<String, String> sources) {
+		return compile(className, source, sources, java.util.Map.of());
+	}
+
+	public static Result compile(String className, String source, Function<String, String> sources, java.util.Map<String, Object> optionValues) {
 		String file = className.substring(className.lastIndexOf('.') + 1) + ".sfy";
-		ShaderChecker.Classes classes = new ShaderChecker.Classes(sources);
+		ShaderChecker.Classes classes = new ShaderChecker.Classes(sources, optionValues);
 
 		try {
 			ShaderAst.Unit unit = ShaderParser.parseFile(file, source);

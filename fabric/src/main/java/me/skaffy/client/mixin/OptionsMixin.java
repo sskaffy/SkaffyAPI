@@ -1,7 +1,7 @@
 package me.skaffy.client.mixin;
 
 import me.skaffy.client.gui.ClientGuis;
-import me.skaffy.client.shader.Vista;
+import me.skaffy.client.shader.ShaderOptions;
 
 import net.minecraft.client.Options;
 
@@ -24,7 +24,7 @@ public abstract class OptionsMixin {
 	}
 
 	@Inject(method = "processOptions", at = @At("TAIL"))
-	private void skaffy$vistaOptions(@Coerce Object access, CallbackInfo ci) {
-		Vista.processOptions(access);
+	private void skaffy$shaderOptions(@Coerce Object access, CallbackInfo ci) {
+		ShaderOptions.processOptions(access);
 	}
 }

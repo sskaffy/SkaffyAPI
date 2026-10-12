@@ -1,0 +1,392 @@
+package skaffy.menu;
+
+import skaffy.gui.*;
+
+public class ShaderMenu {
+    static final Color ROW_HOVER = #14FFFFFF;
+    static final Color ROW_SELECTED = #24FFFFFF;
+    static final Color ACCENT = #FF7AA6FF;
+    static final Color TEXT = #FFF4F6FA;
+    static final Color MUTED = #B8E6EAF2;
+    static final Color LINE = #33FFFFFF;
+    static final Color TAG = #26FFFFFF;
+    static final Color TAG_TEXT = #E6FFFFFF;
+    static final Color BAD = #FFFF8080;
+    static final Color BUTTON = #1FFFFFFF;
+    static final Color BUTTON_HOVER = #33FFFFFF;
+
+    Box list;
+    Box details;
+    String shown = "";
+    int seenVersion = -1;
+    String settingsOf = "";
+
+    @Gui
+    public void packs() {
+        page();
+        double bodyHeight = screenHeight() - 92;
+        Box header = add(box().pos(0, 0).size(100%, 52).padding(14, 20).column(4));
+        header.add(text(lang("skaffys-api.shaders.title")).fontSize(12).bold(true).color(TEXT));
+        header.add(text(shadersAllowed() ? lang("skaffys-api.shaders.drop") : lang("skaffys-api.shaders.serverOff")).color(shadersAllowed() ? MUTED : #FFFFC857));
+
+        Box body = add(box().pos(0, 52).size(100%, bodyHeight).padding(0, 20).row(12));
+        list = body.add(glass(box().size(42%, 100%)).scroll(true).scrollbar(MODERN).padding(4).column(2));
+        details = body.add(glass(box().size(58% - 12, 100%)).scroll(true).scrollbar(MODERN).padding(16).column(10));
+
+        Box footer = add(box().pos(0, screenHeight() - 40).size(100%, 40).padding(8, 20).row(8).justify(END).alignItems(CENTER));
+        footer.add(flatButton(lang("skaffys-api.shaders.openFolder"), false)).tooltip(lang("skaffys-api.shaders.openFolder.tooltip")).onClick(() -> openShaderFolder());
+        footer.add(flatButton(lang("skaffys-api.shaders.reload"), false)).onClick(() -> reloadShaders());
+        footer.add(flatButton(lang("gui.done"), true)).onClick(() -> close());
+
+        shown = shaderSelected();
+        refresh();
+        every(250ms, () -> {
+            if (shaderVersion() != seenVersion) {
+                refresh();
+            }
+        });
+        onResize(() -> packs());
+    }
+
+    void page() {
+        blur(10);
+        tint(#59101624, #8C06080D);
+    }
+
+    Box glass(Box box) {
+        box.gradient(180, #2EFFFFFF, #10FFFFFF).border(1, LINE).shadow(#59000000, 14, 0, 4);
+        return box;
+    }
+
+    void refresh() {
+        seenVersion = shaderVersion();
+        double scroll = list.scrollY();
+        list.clear();
+
+        for (String id : shaderPacks()) {
+            list.add(row(id));
+        }
+
+        list.scrollTo(0, scroll);
+        showDetails(shown);
+    }
+
+    Box row(String id) {
+        Map<String, String> info = shaderInfo(id);
+        boolean selected = id.equals(shaderSelected());
+        Box row = box().width(100%).padding(8, 10).row(10).alignItems(CENTER).cursor(HAND);
+        row.color(selected ? ROW_SELECTED : #00000000);
+        row.hover().color(selected ? ROW_SELECTED : ROW_HOVER);
+        row.transition(90ms);
+
+        Box accent = row.add(box().size(2, 32).color(selected ? ACCENT : #00000000));
+        row.add(image(info.get("icon")).size(32, 32));
+        Box column = row.add(box().width(100% - 60).column(3));
+        Box title = column.add(box().row(6).alignItems(CENTER));
+        title.add(text(info.get("name")).color(TEXT).bold(selected));
+        addTags(title, info);
+
+        String description = mini(info.get("description")).plain().replace("\n", " ");
+
+        if (description.length() > 90) {
+            description = description.substring(0, 88).trim() + "…";
+        }
+
+        if (!description.isEmpty()) {
+            column.add(text(description).color(MUTED).maxWidth(100%));
+        }
+
+        row.onClick(() -> {
+            playSound("minecraft:ui.button.click", 0.15, 1.0);
+            shown = id;
+
+            if (!id.equals(shaderSelected()) || !shadersAllowed()) {
+                selectShader(id);
+            }
+
+            refresh();
+        });
+        return row;
+    }
+
+    void addTags(Box title, Map<String, String> info) {
+        String kind = info.get("kind");
+
+        if (kind.equals("vanilla") || kind.equals("builtin")) {
+            title.add(tag(lang("skaffys-api.shaders.kind.builtin"), TAG_TEXT));
+        } else if (kind.equals("folder")) {
+            title.add(tag(lang("skaffys-api.shaders.kind.folder"), TAG_TEXT));
+        }
+
+        if (info.get("state").equals("loading")) {
+            title.add(tag(lang("skaffys-api.shaders.loading"), MUTED));
+        } else if (info.get("state").equals("failed")) {
+            title.add(tag(lang("skaffys-api.shaders.failed"), BAD));
+        }
+    }
+
+    Box tag(String label, Color color) {
+        Box tag = box().color(TAG).padding(1, 4);
+        tag.add(text(label).color(color).fontSize(7));
+        return tag;
+    }
+
+    void showDetails(String id) {
+        double scroll = details.scrollY();
+        details.clear();
+        Map<String, String> info = shaderInfo(id);
+
+        if (info.size() == 0) {
+            return;
+        }
+
+        Box head = details.add(box().width(100%).row(12).alignItems(CENTER));
+        head.add(image(info.get("icon")).size(64, 64));
+        Box titles = head.add(box().width(100% - 76).column(5));
+        titles.add(text(info.get("name")).fontSize(14).bold(true).color(TEXT).maxWidth(100%));
+        Box tags = titles.add(box().row(6));
+        addTags(tags, info);
+
+        if (id.equals(shaderSelected()) && shadersAllowed()) {
+            tags.add(tag(lang("skaffys-api.shaders.active"), #FF7DFFA0));
+        }
+
+        details.add(box().size(100%, 1).color(LINE));
+
+        if (!info.get("description").isEmpty()) {
+            section(lang("skaffys-api.shaders.description"));
+            details.add(text(mini(info.get("description"))).color(TEXT).maxWidth(100%));
+        }
+
+        if (!info.get("author").isEmpty()) {
+            section(lang("skaffys-api.shaders.author"));
+            details.add(text(info.get("author")).color(TEXT).maxWidth(100%));
+        }
+
+        if (!info.get("version").isEmpty()) {
+            section(lang("skaffys-api.shaders.version"));
+            details.add(text(info.get("version")).color(TEXT));
+        }
+
+        if (!info.get("license").isEmpty()) {
+            section(lang("skaffys-api.shaders.licenseTitle"));
+            details.add(text(info.get("license")).color(TEXT).maxWidth(100%));
+        }
+
+        List<String> labels = shaderLinkLabels(id);
+        List<String> urls = shaderLinkUrls(id);
+
+        if (!labels.isEmpty()) {
+            section(lang("skaffys-api.shaders.links"));
+            Box links = details.add(box().width(100%).row(6).wrap(true));
+
+            for (int i = 0; i < labels.size(); i++) {
+                String url = urls.get(i);
+                links.add(flatButton(labels.get(i), false)).tooltip(url).onClick(() -> openLink(url));
+            }
+        }
+
+        if (info.get("settings").equals("true")) {
+            details.add(box().size(100%, 4));
+            details.add(flatButton(lang("skaffys-api.shaders.settings"), true)).onClick(() -> settings(id));
+        }
+
+        List<String> problems = shaderProblems(id);
+
+        if (!problems.isEmpty()) {
+            section(lang("skaffys-api.shaders.problems"));
+
+            for (String problem : problems) {
+                details.add(text(problem).color(BAD).maxWidth(100%));
+            }
+        }
+
+        details.scrollTo(0, id.equals(shown) ? scroll : 0);
+    }
+
+    void section(String title) {
+        details.add(text(title.toUpperCase()).color(MUTED).fontSize(7));
+    }
+
+    Button flatButton(String label, boolean primary) {
+        Button button = button(label).padding(6, 12).color(primary ? #A65B8CFF : BUTTON).textColor(TEXT).radius(0).border(1, primary ? #807AA6FF : LINE);
+        button.hover().color(primary ? #CC6F9BFF : BUTTON_HOVER);
+        button.pressed().color(primary ? #E64A79E8 : #0FFFFFFF);
+        button.transition(80ms);
+        return button;
+    }
+
+    public void filesDropped(List<String> names) {
+        if (!shadersAllowed() && settingsOf.isEmpty()) {
+            return;
+        }
+
+        Box shade = add(box().pos(0, 0).size(100%, 100%).color(#80000000).z(100));
+        Box panel = shade.add(glass(box().pos(50% - 140, 50% - 70).width(280)).noGradient().color(#E61A1E28).padding(16).column(10));
+        panel.add(text(lang("skaffys-api.shaders.dropConfirm")).bold(true).color(TEXT).maxWidth(100%));
+        panel.add(text(joined(names)).color(MUTED).maxWidth(100%));
+        Box buttons = panel.add(box().width(100%).row(8).justify(END));
+        buttons.add(flatButton(lang("gui.cancel"), false)).onClick(() -> shade.remove());
+        buttons.add(flatButton(lang("skaffys-api.shaders.add"), true)).onClick(() -> {
+            List<String> failed = addDroppedShaders();
+            shade.remove();
+
+            if (!failed.isEmpty()) {
+                Box note = add(glass(box().pos(50% - 140, screenHeight() - 80).width(280)).noGradient().color(#CC3A1F24).borderColor(BAD).padding(8).z(100));
+                note.add(text(lang("skaffys-api.shaders.copyFailed", joined(failed))).color(TEXT).maxWidth(100%));
+                after(4s, () -> note.remove());
+            }
+
+            refresh();
+        });
+    }
+
+    @Gui
+    public void settings(String id) {
+        settingsOf = id;
+        page();
+        Map<String, String> info = shaderInfo(id);
+        Box header = add(box().pos(0, 0).size(100%, 52).padding(14, 20).row(12).alignItems(CENTER));
+        header.add(flatButton("←", false)).tooltip(lang("skaffys-api.shaders.back")).onClick(() -> back());
+        header.add(text(lang("skaffys-api.shaders.settings.title", info.get("name"))).fontSize(12).bold(true).color(TEXT));
+
+        Box body = add(glass(box().pos(20, 52).size(100% - 40, screenHeight() - 92)).scroll(true).scrollbar(MODERN).padding(4).column(2));
+        int count = optionCount(id);
+
+        if (count == 0) {
+            body.add(text(lang("skaffys-api.shaders.settings.none")).color(MUTED)).padding(16);
+        }
+
+        for (int i = 0; i < count; i++) {
+            body.add(option(id, i));
+        }
+
+        Box footer = add(box().pos(0, screenHeight() - 40).size(100%, 40).padding(8, 20).row(8).justify(END).alignItems(CENTER));
+        footer.add(flatButton(lang("skaffys-api.shaders.settings.reset"), false)).onClick(() -> {
+            resetOptions(id);
+            settings(id);
+        });
+        footer.add(flatButton(lang("gui.done"), true)).onClick(() -> back());
+        onEscape(() -> back());
+        onResize(() -> settings(id));
+    }
+
+    void back() {
+        shown = settingsOf;
+        settingsOf = "";
+        packs();
+    }
+
+    Box option(String id, int index) {
+        Map<String, String> info = optionInfo(id, index);
+        Box row = box().width(100%).padding(10, 16).row(16).alignItems(CENTER);
+        row.hover().color(ROW_HOVER);
+        Box left = row.add(box().width(100% - 236).column(3));
+        Box name = left.add(box().row(6).alignItems(CENTER));
+        name.add(text(info.get("name")).color(TEXT));
+
+        if (info.get("rebuilds").equals("true")) {
+            name.add(tag(lang("skaffys-api.shaders.settings.rebuildsTag"), TAG_TEXT)).tooltip(lang("skaffys-api.shaders.settings.rebuilds"));
+        }
+
+        if (!info.get("description").isEmpty()) {
+            left.add(text(info.get("description")).color(MUTED).maxWidth(100%));
+        }
+
+        Box control = row.add(box().width(220).column(4));
+        String type = info.get("type");
+        List<Double> value = optionValue(id, index);
+
+        if (type.equals("switch")) {
+            Button toggle = control.add(flatButton("", value.get(0) != 0));
+            toggle.width(100%);
+            toggle.label(value.get(0) != 0 ? lang("options.on") : lang("options.off"));
+            toggle.onClick(() -> {
+                List<Double> now = optionValue(id, index);
+                List<Double> next = new ArrayList<>();
+                next.add(now.get(0) != 0 ? 0.0 : 1.0);
+                setOption(id, index, next);
+                boolean on = next.get(0) != 0;
+                toggle.label(on ? lang("options.on") : lang("options.off"));
+                toggle.color(on ? ACCENT : BUTTON);
+            });
+        } else if (type.equals("choice")) {
+            List<Double> choices = optionChoices(id, index);
+            boolean integer = info.get("integer").equals("true");
+            Button cycle = control.add(flatButton(number(value.get(0), integer), false));
+            cycle.width(100%);
+            cycle.onClick(() -> {
+                double now = optionValue(id, index).get(0);
+                int at = choices.indexOf(now);
+                double next = choices.get((at + 1) % choices.size());
+                List<Double> picked = new ArrayList<>();
+                picked.add(next);
+                setOption(id, index, picked);
+                cycle.label(number(next, integer));
+            });
+        } else if (type.equals("slider")) {
+            boolean integer = info.get("integer").equals("true");
+            Text shownValue = control.add(text(number(value.get(0), integer)).color(TEXT));
+            control.add(styled(slider(optionMin(id, index), optionMax(id, index)).step(optionStep(id, index)).value(value.get(0)))
+                    .onChange(v -> shownValue.text(number(v, integer)))
+                    .onDone(v -> {
+                        List<Double> picked = new ArrayList<>();
+                        picked.add(v);
+                        setOption(id, index, picked);
+                    }));
+        } else {
+            Box swatch = control.add(box().size(100%, 10).color(toColor(value)).border(1, LINE));
+            List<String> names = List.of("R", "G", "B", "A");
+
+            for (int c = 0; c < value.size(); c++) {
+                int channel = c;
+                Box line = control.add(box().width(100%).row(6).alignItems(CENTER));
+                line.add(text(names.get(c)).color(MUTED).width(10));
+                line.add(styled(slider(0, 1).step(1.0 / 255.0).value(value.get(c))).width(100% - 16).onChange(v -> {
+                    List<Double> now = optionValue(id, index);
+                    now.set(channel, v);
+                    swatch.color(toColor(now));
+                }).onDone(v -> {
+                    List<Double> now = optionValue(id, index);
+                    now.set(channel, v);
+                    setOption(id, index, now);
+                }));
+            }
+        }
+
+        return row;
+    }
+
+    String joined(List<String> parts) {
+        String result = "";
+
+        for (String part : parts) {
+            result = result.isEmpty() ? part : result + ", " + part;
+        }
+
+        return result;
+    }
+
+    Slider styled(Slider slider) {
+        slider.width(100%).height(12);
+        slider.track().color(#33FFFFFF).height(4).radius(0);
+        slider.fill().color(ACCENT).radius(0);
+        slider.knob().size(8, 12).color(TEXT).radius(0);
+        return slider;
+    }
+
+    String number(double value, boolean integer) {
+        if (integer || value == Math.floor(value)) {
+            return String.valueOf((long) Math.round(value));
+        }
+
+        return String.format("%.2f", value);
+    }
+
+    Color toColor(List<Double> value) {
+        int r = (int) Math.round(value.get(0) * 255);
+        int g = (int) Math.round(value.get(1) * 255);
+        int b = (int) Math.round(value.get(2) * 255);
+        return Color.rgb(r, g, b);
+    }
+}

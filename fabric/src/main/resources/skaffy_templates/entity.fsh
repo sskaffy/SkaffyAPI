@@ -28,6 +28,7 @@ layout(location = 4) in vec4 skOverlay;
 layout(location = 5) in vec4 skUv;
 layout(location = 6) in vec3 skPosition;
 layout(location = 7) in vec3 skNormal;
+layout(location = 15) flat in ivec2 skIds;
 
 #ifndef OIT_ALPHA_ONLY
 layout(location = 0) out vec4 fragColor;
@@ -126,6 +127,13 @@ void main() {
     f.sk_emission = vec3(0.0);
     f.sk_hasMaterial = false;
     f.sk_unlit = false;
+    f.sk_entity = skIds.x;
+    f.sk_item = skIds.y;
+    #ifdef EMISSIVE
+    f.sk_emissive = true;
+    #else
+    f.sk_emissive = false;
+    #endif
     vec4 result = sk_fragmentHook(f);
 
     #ifdef OIT_ALPHA_ONLY

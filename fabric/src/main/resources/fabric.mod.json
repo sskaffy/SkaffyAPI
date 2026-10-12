@@ -3,13 +3,12 @@
 	"id": "skaffys-api",
 	"version": "${version}",
 	"name": "Skaffy's API",
-	"description": "Client sided APIs for servers.",
+	"description": "Client sided APIs for servers and shaders.",
 	"authors": [
 		"Skaffy"
 	],
 	"contact": {
-		"sources": "https://github.com/sskaffy/SkaffyAPI",
-		"issues": "https://github.com/sskaffy/SkaffyAPI/issues"
+		"sources": "https://github.com/sskaffy"
 	},
 	"license": "Custom License",
 	"icon": "assets/skaffys-api/icon.png",

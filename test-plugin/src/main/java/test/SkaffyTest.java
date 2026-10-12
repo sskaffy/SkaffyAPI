@@ -65,7 +65,7 @@ public final class SkaffyTest extends JavaPlugin implements Listener {
 	private final BrightnessTests brightnessTests = new BrightnessTests();
 	private final LookTests lookTests = new LookTests();
 	private final ShaderTests shaderTests = new ShaderTests();
-	private final VistaTests vistaTests = new VistaTests();
+	private final ClientShaderTests clientShaderTests = new ClientShaderTests();
 	private final BuildTests buildTests = new BuildTests();
 	private final AnimationTests animationTests = new AnimationTests();
 
@@ -104,7 +104,7 @@ public final class SkaffyTest extends JavaPlugin implements Listener {
 		shaderTests.register(api, this);
 		getServer().getPluginManager().registerEvents(guiTests, this);
 		getServer().getPluginManager().registerEvents(shaderTests, this);
-		getServer().getPluginManager().registerEvents(vistaTests, this);
+		getServer().getPluginManager().registerEvents(clientShaderTests, this);
 		getServer().getPluginManager().registerEvents(buildTests, this);
 		buildTests.register(this);
 		animationTests.register(api, this);
@@ -234,8 +234,8 @@ public final class SkaffyTest extends JavaPlugin implements Listener {
 			return shaderTests.command(player, args);
 		}
 
-		if (args.length > 0 && args[0].equals("vista")) {
-			return vistaTests.command(player, args);
+		if (args.length > 0 && args[0].equals("clientshaders")) {
+			return clientShaderTests.command(player, args);
 		}
 
 		if (args.length > 0 && args[0].equals("build")) {
@@ -313,7 +313,7 @@ public final class SkaffyTest extends JavaPlugin implements Listener {
 	@Override
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
 		if (args.length == 1) {
-			return List.of("clear", "particle", "key", "model", "fov", "nametag", "gui", "perspective", "brightness", "look", "shader", "vista", "build", "animation").stream().filter(option -> option.startsWith(args[0])).toList();
+			return List.of("clear", "particle", "key", "model", "fov", "nametag", "gui", "perspective", "brightness", "look", "shader", "clientshaders", "build", "animation").stream().filter(option -> option.startsWith(args[0])).toList();
 		}
 
 		if (args[0].equals("model")) {
@@ -348,8 +348,8 @@ public final class SkaffyTest extends JavaPlugin implements Listener {
 			return shaderTests.tabComplete(args);
 		}
 
-		if (args[0].equals("vista")) {
-			return vistaTests.tabComplete(args);
+		if (args[0].equals("clientshaders")) {
+			return clientShaderTests.tabComplete(args);
 		}
 
 		if (args[0].equals("build")) {

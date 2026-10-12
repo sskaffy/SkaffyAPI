@@ -1,11 +1,16 @@
 package test;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 import me.skaffy.api.AssetRegistry;
@@ -42,7 +47,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 
 final class AnimationTests implements Listener {
-	private static final Path IMPORT_FOLDER = Path.of("../../test-models");
 	private static final List<String> SUBCOMMANDS = List.of("robot", "walk", "wave", "var", "bone", "look", "stop", "item", "bird", "glide", "turret", "boom",
 			"backpack", "cutscene", "personal", "mob", "mobwave", "mobvar", "model", "many", "list", "clear");
 
@@ -97,23 +101,42 @@ final class AnimationTests implements Listener {
 	}
 
 	private void importModels(CustomEntityModels models) {
-		Path folder = IMPORT_FOLDER.toAbsolutePath().normalize();
+		Path folder = plugin.getDataFolder().toPath().resolve("test-models");
+		List<Path> sources = new ArrayList<>();
 
-		if (!Files.isDirectory(folder)) {
-			plugin.getLogger().info("No test model folder at " + folder + ", nothing imported");
+		try (JarFile jar = new JarFile(new File(AnimationTests.class.getProtectionDomain().getCodeSource().getLocation().toURI()))) {
+			Files.createDirectories(folder);
+
+			for (JarEntry entry : java.util.Collections.list(jar.entries())) {
+				String name = entry.getName();
+
+				if (entry.isDirectory() || !name.startsWith("test-models/") || !name.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+					continue;
+				}
+
+				Path target = folder.resolve(name.substring("test-models/".length()));
+
+				if (!Files.isRegularFile(target) || Files.size(target) != entry.getSize()) {
+					plugin.getLogger().info("Unpacking test model " + target.getFileName());
+
+					try (InputStream in = jar.getInputStream(entry)) {
+						Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+					}
+				}
+
+				sources.add(target);
+			}
+		} catch (IOException | java.net.URISyntaxException | RuntimeException e) {
+			plugin.getLogger().warning("Couldn't unpack the test models from the jar: " + e.getMessage());
 			return;
 		}
 
-		List<Path> sources;
-
-		try (Stream<Path> files = Files.list(folder)) {
-			sources = files.filter(file -> Files.isDirectory(file) || file.toString().matches("(?i).*\\.(zip|gltf|glb)$")).sorted().toList();
-		} catch (IOException e) {
-			plugin.getLogger().warning("Can't list " + folder + ": " + e.getMessage());
+		if (sources.isEmpty()) {
+			plugin.getLogger().info("No test models in the jar, nothing imported");
 			return;
 		}
 
-		for (Path source : sources) {
+		for (Path source : sources.stream().sorted().toList()) {
 			String name = importName(source.getFileName().toString());
 
 			try {

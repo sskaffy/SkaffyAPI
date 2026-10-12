@@ -62,7 +62,7 @@ import net.minecraft.world.item.component.ResolvableProfile;
 
 import org.jspecify.annotations.Nullable;
 
-final class GuiTextures {
+public final class GuiTextures {
 	private static final String NAMESPACE = "skaffy_gui_" + Long.toString(ThreadLocalRandom.current().nextLong() & Long.MAX_VALUE, 36).toLowerCase(Locale.ROOT);
 	private static final Map<String, Texture> IMAGES = new HashMap<>();
 	private static final Map<String, Supplier<PlayerSkinRenderCache.RenderInfo>> HEADS = new HashMap<>();
@@ -162,11 +162,24 @@ final class GuiTextures {
 		return loaded;
 	}
 
+	private static final Map<String, byte[]> LOCAL = new java.util.concurrent.ConcurrentHashMap<>();
+
+	public static void putLocal(String key, byte[] png) {
+		byte[] old = LOCAL.put("@" + key, png);
+
+		if (old != null && !java.util.Arrays.equals(old, png)) {
+			IMAGES.remove("@" + key);
+		}
+	}
+
 	private static Texture loadImage(String source) {
 		byte[] png;
 		byte[] metadata;
 
-		if (source.contains(":")) {
+		if (source.startsWith("@")) {
+			png = LOCAL.get(source);
+			metadata = null;
+		} else if (source.contains(":")) {
 			Identifier id = Identifier.tryParse(source.toLowerCase(Locale.ROOT));
 
 			if (id == null) {

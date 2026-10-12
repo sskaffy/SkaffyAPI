@@ -31,6 +31,7 @@ layout(location = 4) out vec4 skOverlay;
 layout(location = 5) out vec4 skUv;
 layout(location = 6) out vec3 skPosition;
 layout(location = 7) out vec3 skNormal;
+layout(location = 15) flat out ivec2 skIds;
 
 void main() {
     ivec2 light = UV2 & ivec2(0xFF);
@@ -46,6 +47,8 @@ void main() {
     v.sk_skyLight = float(light.y) / 240.0;
     v.sk_top = false;
     v.sk_isHand = sk_isHand != 0;
+    v.sk_entity = (UV1.x >> 4) & 0x7FF;
+    v.sk_item = (UV1.y >> 4) & 0x7FF;
     sk_vertexHook(v);
 
 #ifdef SK_SHADOW_PASS
@@ -58,7 +61,7 @@ void main() {
 
     #ifndef OIT_ALPHA_ONLY
     skLightmap = sample_lightmap(Sampler2, light);
-    skOverlay = texelFetch(Sampler1, UV1, 0);
+    skOverlay = texelFetch(Sampler1, UV1 & ivec2(15), 0);
     #else
     skLightmap = vec4(1.0);
     skOverlay = vec4(1.0);
@@ -75,4 +78,5 @@ void main() {
     skUv = vec4(v.sk_uv, glintCoord);
     skPosition = v.sk_position;
     skNormal = Normal;
+    skIds = ivec2(v.sk_entity, v.sk_item);
 }

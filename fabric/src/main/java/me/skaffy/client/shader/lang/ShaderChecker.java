@@ -138,10 +138,16 @@ final class ShaderChecker {
 		private final List<CompileError> parseErrors = new ArrayList<>();
 		final Set<String> dependencies = new java.util.TreeSet<>();
 		final Set<String> missing = new java.util.TreeSet<>();
+		final Map<String, Object> optionValues;
 		private int next = 1;
 
 		Classes(java.util.function.Function<String, String> sources) {
+			this(sources, Map.of());
+		}
+
+		Classes(java.util.function.Function<String, String> sources, Map<String, Object> optionValues) {
 			this.sources = sources;
+			this.optionValues = optionValues;
 		}
 
 		boolean exists(String fullName) {
@@ -230,6 +236,9 @@ final class ShaderChecker {
 		Format format = Format.RGBA16F;
 		boolean persistent;
 		List<String> blocks;
+		String idKind;
+		List<String> ids;
+		ShaderModule.Option option;
 
 		FieldSym(Kind kind, String name, ShType type, Pos pos) {
 			this.kind = kind;
@@ -276,6 +285,8 @@ final class ShaderChecker {
 		String shadowWhat;
 		Pos sourceUse;
 		Pos writeUse;
+		Pos targetWriteUse;
+		FieldSym when;
 		final Set<FieldSym> outputsWritten = new LinkedHashSet<>();
 		boolean usesShadowMap;
 		boolean usesSolid;
@@ -350,6 +361,7 @@ final class ShaderChecker {
 
 	private void checkProgramWide(List<FieldSym> all) {
 		Map<Integer, FieldSym> materials = new HashMap<>();
+		Map<String, FieldSym> ids = new HashMap<>();
 		int lights = 0;
 		int filters = 0;
 
@@ -359,6 +371,14 @@ final class ShaderChecker {
 
 				if (other != null) {
 					error(Pos.NONE, "Block material " + field.value.intValue() + " is used twice: " + other.serverName + " and " + field.serverName);
+				}
+			}
+
+			if (field.ids != null && field.value != null) {
+				FieldSym other = ids.putIfAbsent(field.idKind + field.value.intValue(), field);
+
+				if (other != null) {
+					error(Pos.NONE, "@" + field.idKind + " number " + field.value.intValue() + " is used twice: " + other.serverName + " and " + field.serverName);
 				}
 			}
 
@@ -801,6 +821,7 @@ final class ShaderChecker {
 
 		Annotation kindAnnotation = null;
 		Annotation blocks = null;
+		Annotation option = null;
 		List<Annotation> light = new ArrayList<>();
 
 		for (Annotation annotation : field.annotations()) {
@@ -825,7 +846,20 @@ final class ShaderChecker {
 
 					kindAnnotation = annotation;
 				}
-				case "Blocks" -> blocks = annotation;
+				case "Blocks", "Entities", "Items", "Biomes", "Dimensions" -> {
+					if (blocks != null) {
+						error(annotation.pos(), "A field can only be one of @Blocks, @Entities, @Items, @Biomes and @Dimensions");
+					}
+
+					blocks = annotation;
+				}
+				case "Option" -> {
+					if (option != null) {
+						error(annotation.pos(), "One @Option per field");
+					}
+
+					option = annotation;
+				}
 				case "Light", "LightFilter" -> {
 					if (!light.isEmpty() && !light.getFirst().name().equals(annotation.name())) {
 						error(annotation.pos(), "A field can only be one of @Light and @LightFilter");
@@ -851,7 +885,7 @@ final class ShaderChecker {
 				return;
 			}
 
-			declareConstant(field, blocks, light);
+			declareConstant(field, blocks, light, option);
 			return;
 		}
 
@@ -860,7 +894,12 @@ final class ShaderChecker {
 		}
 
 		if (blocks != null) {
-			error(blocks.pos(), "@Blocks goes on a const int, like @Blocks(\"minecraft:water\") const int WATER = 1;");
+			error(blocks.pos(), "@" + blocks.name() + " goes on a const int, like @Blocks(\"minecraft:water\") const int WATER = 1;");
+		}
+
+		if (option != null && !kindAnnotation.name().equals("Uniform")) {
+			error(option.pos(), "@Option goes on a @Uniform (changes right away) or a constant (the shader is built again)");
+			option = null;
 		}
 
 		if (!light.isEmpty() && !kindAnnotation.name().equals("Uniform")) {
@@ -875,7 +914,13 @@ final class ShaderChecker {
 		}
 
 		switch (kindAnnotation.name()) {
-			case "Uniform" -> declareUniform(field, kindAnnotation, type, light);
+			case "Uniform" -> {
+				declareUniform(field, kindAnnotation, type, light);
+
+				if (option != null && fields.get(field.name()) instanceof FieldSym uniform && uniform.kind == FieldSym.Kind.UNIFORM) {
+					uniform.option = option(option, uniform, false);
+				}
+			}
 			case "Varying" -> declareVarying(field, kindAnnotation, type);
 			case "Texture" -> declareTexture(field, kindAnnotation, type);
 			case "Target" -> declareTarget(field, kindAnnotation, type);
@@ -992,14 +1037,14 @@ final class ShaderChecker {
 			switch (arg.key() == null ? "" : arg.key()) {
 				case "format" -> sym.format = enumArg(arg, Format.class, sym.format);
 				case "filter" -> sym.filter = enumArg(arg, Filter.class, sym.filter);
-				default -> error(arg.pos(), "@Output takes format = RGBA16F/RGBA8 and filter = NEAREST/LINEAR");
+				default -> error(arg.pos(), "@Output takes format = RGBA16F/RGBA8/RGBA32F and filter = NEAREST/LINEAR");
 			}
 		}
 
 		fields.put(field.name(), sym);
 	}
 
-	private void declareConstant(Field field, Annotation blocks, List<Annotation> light) {
+	private void declareConstant(Field field, Annotation blocks, List<Annotation> light, Annotation option) {
 		if (field.init() == null) {
 			error(field.pos(), "A constant needs a value: const float " + field.name() + " = ...;");
 			return;
@@ -1030,15 +1075,37 @@ final class ShaderChecker {
 		sym.value = init.value();
 		sym.initCode = init.code();
 
-		if (blocks != null) {
-			if (!init.type().equals(ShType.INT) || sym.value == null) {
-				error(blocks.pos(), "@Blocks goes on a const int with a number, like @Blocks(\"minecraft:water\") const int WATER = 1;");
-			} else if (sym.value.intValue() < 1 || sym.value.intValue() > 4095) {
-				error(field.pos(), "Block materials are numbers from 1 to 4095 (0 means not listed)");
-			} else if (blocks.args().size() != 1 || blocks.args().getFirst().key() != null) {
-				error(blocks.pos(), "Write @Blocks(\"minecraft:water\") or @Blocks({\"#minecraft:leaves\", \"minecraft:short_grass\"})");
+		if (option != null) {
+			if (sym.value == null || !(sym.type.equals(ShType.BOOL) || sym.type.equals(ShType.INT) || sym.type.equals(ShType.FLOAT))) {
+				error(option.pos(), "An @Option constant is a bool, int or float with a fixed value");
 			} else {
+				sym.option = option(option, sym, true);
+				Const picked = sym.option == null ? null : picked(sym.option, classes.optionValues.get(sym.serverName));
+
+				if (picked != null) {
+					sym.value = picked;
+					sym.initCode = picked.glsl();
+				}
+			}
+		}
+
+		if (blocks != null) {
+			String kind = blocks.name();
+			int min = kind.equals("Dimensions") ? 4 : 1;
+			int max = kind.equals("Entities") || kind.equals("Items") ? 2047 : 4095;
+
+			if (!init.type().equals(ShType.INT) || sym.value == null) {
+				error(blocks.pos(), "@" + kind + " goes on a const int with a number, like @" + kind + "(" + example(kind) + ") const int NAME = " + min + ";");
+			} else if (sym.value.intValue() < min || sym.value.intValue() > max) {
+				error(field.pos(), kind.equals("Dimensions") ? "Dimension numbers are 4 to 4095 (0 to 3 are OVERWORLD, NETHER, END and OTHER_DIMENSION)"
+						: kind.equals("Blocks") ? "Block materials are numbers from 1 to 4095 (0 means not listed)" : "@" + kind + " numbers are 1 to " + max + " (0 means not listed)");
+			} else if (blocks.args().size() != 1 || blocks.args().getFirst().key() != null) {
+				error(blocks.pos(), "Write @" + kind + "(" + example(kind) + ") or a list in { }");
+			} else if (kind.equals("Blocks")) {
 				sym.blocks = blockList("Blocks", blocks.args().getFirst().value(), blocks.pos());
+			} else {
+				sym.idKind = kind;
+				sym.ids = idList(kind, blocks.args().getFirst().value(), blocks.pos());
 			}
 		}
 
@@ -1051,6 +1118,179 @@ final class ShaderChecker {
 		}
 
 		fields.put(field.name(), sym);
+	}
+
+	private static String example(String kind) {
+		return switch (kind) {
+			case "Entities" -> "\"minecraft:zombie\"";
+			case "Items" -> "\"minecraft:torch\"";
+			case "Biomes" -> "\"#minecraft:is_ocean\"";
+			case "Dimensions" -> "\"mymod:moon\"";
+			default -> "\"minecraft:water\"";
+		};
+	}
+
+	private List<String> idList(String annotation, Expr value, Pos pos) {
+		List<String> result = new ArrayList<>();
+		List<Expr> values = value instanceof ArrayInit init ? init.values() : List.of(value);
+
+		if (values.isEmpty()) {
+			error(pos, "@" + annotation + " needs at least one id");
+		}
+
+		for (Expr entry : values) {
+			if (!(entry instanceof Literal literal) || literal.kind() != ShaderAst.LiteralKind.STRING) {
+				error(entry.pos(), "Ids are written as text, like " + example(annotation));
+				continue;
+			}
+
+			String id = (String) literal.value();
+			boolean tag = id.startsWith("#");
+			String plain = tag ? id.substring(1) : id;
+
+			if (tag && annotation.equals("Dimensions")) {
+				error(entry.pos(), "Dimensions have no tags; name each one, like \"minecraft:the_nether\"");
+				continue;
+			}
+
+			if (!plain.matches("([a-z0-9_.-]+:)?[a-z0-9_./-]+")) {
+				error(entry.pos(), "\"" + id + "\" isn't an id (like " + example(annotation).replace("\"", "") + ")" + (annotation.equals("Dimensions") ? "" : " or a tag (#namespace:name)"));
+				continue;
+			}
+
+			result.add(tag ? "#" + withNamespace(plain) : withNamespace(plain));
+		}
+
+		return result;
+	}
+
+	private ShaderModule.Option option(Annotation annotation, FieldSym sym, boolean constant) {
+		ShType type = sym.type;
+		boolean color = type.equals(ShType.VEC3) || type.equals(ShType.VEC4);
+		boolean number = type.equals(ShType.INT) || type.equals(ShType.FLOAT);
+
+		if (!(type.equals(ShType.BOOL) || number || color)) {
+			error(annotation.pos(), "@Option goes on a bool (a switch), an int or float (a slider or a choice) or a vec3/vec4 color");
+			return null;
+		}
+
+		String name = sym.name;
+		String description = "";
+		Double min = null;
+		Double max = null;
+		Double step = null;
+		List<Double> choices = new ArrayList<>();
+		ShType scalar = type.equals(ShType.INT) ? ShType.INT : ShType.FLOAT;
+
+		for (AnnotationArg arg : annotation.args()) {
+			String key = arg.key() == null ? "name" : arg.key();
+
+			switch (key) {
+				case "name", "description" -> {
+					String text = stringArg(arg);
+
+					if (text != null && text.length() > (key.equals("name") ? 64 : 512)) {
+						error(arg.pos(), key + " is at most " + (key.equals("name") ? 64 : 512) + " characters");
+					} else if (text != null && key.equals("name")) {
+						name = text;
+					} else if (text != null) {
+						description = text;
+					}
+				}
+				case "min", "max", "step" -> {
+					if (!number) {
+						error(arg.pos(), key + " is for int and float options");
+						continue;
+					}
+
+					Const value = constArg(arg, scalar);
+
+					if (value != null) {
+						switch (key) {
+							case "min" -> min = value.scalar();
+							case "max" -> max = value.scalar();
+							default -> step = value.scalar();
+						}
+					}
+				}
+				case "values" -> {
+					if (!number) {
+						error(arg.pos(), "values is for int and float options");
+						continue;
+					}
+
+					List<Expr> entries = arg.value() instanceof ArrayInit init ? init.values() : List.of(arg.value());
+
+					for (Expr entry : entries) {
+						scopes.push(new HashMap<>());
+						Ex value = convertOrError(checkExpr(entry, scalar), scalar, entry.pos());
+						scopes.pop();
+
+						if (value != null && value.value() == null) {
+							error(entry.pos(), "values must be fixed numbers");
+						} else if (value != null) {
+							choices.add(value.value().scalar());
+						}
+					}
+
+					if (choices.size() > 64) {
+						error(arg.pos(), "values has at most 64 choices");
+					}
+				}
+				default -> error(arg.pos(), "@Option takes name, description, min, max, step and values");
+			}
+		}
+
+		double[] defaults = sym.value != null ? sym.value.values().clone() : new double[type.components()];
+
+		if (number && choices.isEmpty()) {
+			if (min == null || max == null) {
+				error(annotation.pos(), "A number option needs min and max (a slider), or values = {...} (a choice)");
+				return null;
+			}
+
+			if (min >= max) {
+				error(annotation.pos(), "min must be below max");
+				return null;
+			}
+
+			if (step != null && step <= 0) {
+				error(annotation.pos(), "step must be above 0");
+				return null;
+			}
+
+			if (defaults[0] < min || defaults[0] > max) {
+				error(annotation.pos(), "The starting value " + Const.of(type, defaults) + " is outside min and max");
+			}
+		}
+
+		if (!choices.isEmpty() && !choices.contains(defaults[0])) {
+			error(annotation.pos(), "values must include the starting value " + Const.of(type, defaults));
+		}
+
+		double fallbackStep = type.equals(ShType.INT) ? 1 : min != null && max != null ? (max - min) / 100 : 0.01;
+		return new ShaderModule.Option(sym.serverName, name, description, type.name(), constant, defaults, min == null ? 0 : min, max == null ? 1 : max,
+				step == null ? fallbackStep : step, List.copyOf(choices));
+	}
+
+	private static Const picked(ShaderModule.Option option, Object value) {
+		double number;
+
+		if (value instanceof Boolean bool) {
+			number = bool ? 1 : 0;
+		} else if (value instanceof Number given) {
+			number = given.doubleValue();
+		} else {
+			return null;
+		}
+
+		ShType type = ShType.builtin(option.typeName());
+
+		if (type == null || !option.fits(new double[] {number})) {
+			return null;
+		}
+
+		return Const.of(type, type.equals(ShType.INT) ? Math.rint(number) : type.equals(ShType.BOOL) ? (number != 0 ? 1 : 0) : number);
 	}
 
 	private List<String> blockList(String annotation, Expr value, Pos pos) {
@@ -1525,7 +1765,7 @@ final class ShaderChecker {
 
 		for (AnnotationArg arg : annotation.args()) {
 			if (arg.key() == null) {
-				error(arg.pos(), "@Pass takes named values: stage, output, blend");
+				error(arg.pos(), "@Pass takes named values: stage, output, blend, when");
 				continue;
 			}
 
@@ -1541,7 +1781,15 @@ final class ShaderChecker {
 						error(arg.pos(), "output is SCREEN or a @Target field");
 					}
 				}
-				default -> error(arg.pos(), "@Pass takes stage, output and blend");
+				case "when" -> {
+					if (arg.value() instanceof Name name && fields.get(name.name()) instanceof FieldSym flag && flag.type.equals(ShType.BOOL)
+							&& (flag.kind == FieldSym.Kind.UNIFORM || flag.kind == FieldSym.Kind.CONST && flag.value != null)) {
+						sym.when = flag;
+					} else {
+						error(arg.pos(), "when names a bool @Uniform or constant of this file (often an @Option): the pass only runs while it's true");
+					}
+				}
+				default -> error(arg.pos(), "@Pass takes stage, output, blend and when");
 			}
 		}
 
@@ -2751,10 +2999,10 @@ final class ShaderChecker {
 		}
 
 		FieldSym output = call.args().size() == 2 && call.args().getFirst() instanceof Name name && fields.get(name.name()) instanceof FieldSym field
-				&& field.kind == FieldSym.Kind.OUTPUT ? field : null;
+				&& (field.kind == FieldSym.Kind.OUTPUT || field.kind == FieldSym.Kind.TARGET) ? field : null;
 
 		if (output == null) {
-			error(call.pos(), "write(output, value) takes an @Output field of this file and a vec4");
+			error(call.pos(), "write(picture, value) takes an @Output (in @Fragment hooks) or a @Target (in passes) of this file and a vec4");
 			return null;
 		}
 
@@ -2769,7 +3017,9 @@ final class ShaderChecker {
 			return null;
 		}
 
-		if (current.writeUse == null) {
+		if (output.kind == FieldSym.Kind.TARGET && current.targetWriteUse == null) {
+			current.targetWriteUse = call.pos();
+		} else if (output.kind == FieldSym.Kind.OUTPUT && current.writeUse == null) {
 			current.writeUse = call.pos();
 		}
 
@@ -3744,11 +3994,15 @@ final class ShaderChecker {
 							error(method.sourceUse, "SOURCE only works in @Fragment hooks" + via);
 						}
 
-						if (method.writeUse != null) {
-							error(method.writeUse, "write(...) only works in @Fragment hooks" + via);
+						if (method.writeUse != null || method.targetWriteUse != null) {
+							error(method.writeUse != null ? method.writeUse : method.targetWriteUse, "write(...) only works in @Fragment hooks and passes" + via);
 						}
 					}
 					case FRAGMENT -> {
+						if (method.targetWriteUse != null) {
+							error(method.targetWriteUse, "@Fragment hooks write(...) @Output fields; @Target fields are written by passes" + via);
+						}
+
 						if (method.passUse != null) {
 							error(method.passUse, method.passWhat + " only works in passes" + via);
 						}
@@ -3757,8 +4011,11 @@ final class ShaderChecker {
 							error(method.varyingWrite, method.varyingWriteName + " is a @Varying: set it in a @Vertex hook, read it in @Fragment hooks" + via);
 						}
 
-						if (method.sourceUse != null && (root.programs.contains(Program.SKY) || root.programs.contains(Program.CLOUDS))) {
-							error(method.sourceUse, "SOURCE is the texture being drawn, and SKY and CLOUDS hooks have none" + via);
+						for (Program program : root.programs) {
+							if (method.sourceUse != null && Builtins.NO_TEXTURE.contains(program)) {
+								error(method.sourceUse, "SOURCE is the texture being drawn, and " + program + " hooks have none" + via);
+								break;
+							}
 						}
 
 						if (method.writeUse != null && shadow) {
@@ -3777,7 +4034,18 @@ final class ShaderChecker {
 						}
 
 						if (method.writeUse != null) {
-							error(method.writeUse, "write(...) only works in @Fragment hooks; a pass returns its color" + via);
+							error(method.writeUse, "Passes write(...) @Target fields; @Output fields are written by @Fragment hooks" + via);
+						}
+
+						for (FieldSym written : method.outputsWritten) {
+							if (written.kind == FieldSym.Kind.TARGET && reachable(root).stream().anyMatch(other -> other.samplers.contains(written.glsl))) {
+								error(method.targetWriteUse, root.name + " can't read " + written.name + " while it writes it; read it in a later pass" + via);
+							} else if (written.kind == FieldSym.Kind.TARGET && written == root.output) {
+								error(method.targetWriteUse, root.name + " already draws into " + written.name + " (its output); write(...) other @Target fields" + via);
+							} else if (written.kind == FieldSym.Kind.TARGET && !sameSize(written, root.output)) {
+								error(method.targetWriteUse, written.name + " must be the same size as " + (root.output == null ? "the screen" : root.output.name)
+										+ ", the output of " + root.name + via);
+							}
 						}
 					}
 					default -> {
@@ -3787,6 +4055,13 @@ final class ShaderChecker {
 		}
 
 		checkShadowFallback();
+	}
+
+	private static boolean sameSize(FieldSym target, FieldSym other) {
+		float otherScale = other == null ? 1 : other.scale;
+		int otherWidth = other == null ? 0 : other.width;
+		int otherHeight = other == null ? 0 : other.height;
+		return target.width > 0 ? target.width == otherWidth && target.height == otherHeight : otherWidth == 0 && target.scale == otherScale;
 	}
 
 	private void checkShadowFallback() {

@@ -18,8 +18,6 @@ float skShade(int direction) {
     return direction == 4 ? sk_shadeB.x : sk_shadeB.y;
 }
 
-
-
 vec4 skShadowClip(vec3 relative) {
     vec4 clip = sk_shadowMatrix * vec4(relative, 1.0);
 #ifdef RENDERPEARL_DEPTH_IS_ZERO_TO_ONE
@@ -32,23 +30,17 @@ vec4 skShadowClip(vec3 relative) {
 #ifdef SK_FRAGMENT_STAGE
 vec3 skSurfaceNormal(vec3 position) {
     vec3 normal = cross(dFdx(position), dFdy(position));
-
     float length2 = dot(normal, normal);
     if (length2 < 1e-12) {
         return -normalize(position + vec3(0.0, 0.0, 1e-6));
     }
-
     normal *= inversesqrt(length2);
     return dot(normal, position) > 0.0 ? -normal : normal;
 }
-
-
-
 
 vec3 skFacing(vec3 normal, vec3 position) {
     return dot(normal, position) > 0.0 && !gl_FrontFacing ? -normal : normal;
 }
 #endif
-
 
 #endif

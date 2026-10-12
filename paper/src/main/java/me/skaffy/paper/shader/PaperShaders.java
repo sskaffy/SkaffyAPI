@@ -22,9 +22,10 @@ import java.util.logging.Level;
 import java.util.stream.Stream;
 
 import me.skaffy.api.Easing;
+import me.skaffy.api.event.shader.SkaffyClientShaderChangeEvent;
 import me.skaffy.api.event.shader.SkaffyShaderErrorEvent;
 import me.skaffy.api.event.shader.SkaffyShaderStateEvent;
-import me.skaffy.api.event.shader.SkaffyVistaChangeEvent;
+import me.skaffy.api.shader.ClientShaderMode;
 import me.skaffy.api.shader.SkaffyShaders;
 import me.skaffy.protocol.Protocol;
 import me.skaffy.protocol.ProtocolException;
@@ -44,7 +45,8 @@ public final class PaperShaders implements SkaffyShaders, PluginMessageListener,
 	private final Map<String, byte[]> files = new LinkedHashMap<>();
 	private final Map<UUID, Map<String, Integer>> enabled = new ConcurrentHashMap<>();
 	private final Map<UUID, Set<String>> running = new ConcurrentHashMap<>();
-	private final Map<UUID, ShadersPacket.VistaState> vista = new ConcurrentHashMap<>();
+	private final Map<UUID, ShadersPacket.ClientShaderState> clientStates = new ConcurrentHashMap<>();
+	private final Map<UUID, ClientShaderMode> modes = new ConcurrentHashMap<>();
 
 	public PaperShaders(Plugin plugin, Function<UUID, ShaderSession> sessions) {
 		this.plugin = plugin;
@@ -177,7 +179,7 @@ public final class PaperShaders implements SkaffyShaders, PluginMessageListener,
 
 	private static void checkNotReserved(String className) {
 		if (ShadersCodec.isReserved(className)) {
-			throw new IllegalArgumentException(className + ": classes in skaffy. packages belong to the mod" + (className.equals(VISTA) ? " (Vista: use setVista)" : ""));
+			throw new IllegalArgumentException(className + ": classes in skaffy. packages belong to the mod");
 		}
 	}
 
@@ -257,6 +259,8 @@ public final class PaperShaders implements SkaffyShaders, PluginMessageListener,
 
 	@Override
 	public void animate(Player player, String className, Map<String, ?> values, int durationMillis, Easing easing) {
+		checkNotReserved(className);
+
 		if (durationMillis < 0 || durationMillis > ShadersPacket.MAX_DURATION) {
 			throw new IllegalArgumentException("Duration must be 0 to " + ShadersPacket.MAX_DURATION + " ms, got " + durationMillis);
 		}
@@ -284,29 +288,25 @@ public final class PaperShaders implements SkaffyShaders, PluginMessageListener,
 	}
 
 	@Override
-	public boolean setVista(Player player, Boolean enabled, boolean locked) {
-		return send(player, new ShadersPacket.SetVista(enabled, locked));
-	}
+	public boolean setClientShaders(Player player, ClientShaderMode mode) {
+		boolean sent = send(player, new ShadersPacket.SetClientShaders(ShadersPacket.ClientShaderMode.valueOf(mode.name())));
 
-	@Override
-	public Boolean isVistaOn(Player player) {
-		ShadersPacket.VistaState state = vista.get(player.getUniqueId());
-		return state == null ? null : state.enabled();
-	}
-
-	@Override
-	public boolean setShaderDistance(Player player, int chunks, boolean locked) {
-		if (chunks != 0 && (chunks < MIN_SHADER_DISTANCE || chunks > MAX_SHADER_DISTANCE)) {
-			throw new IllegalArgumentException("Shader Distance must be 0 (the player's own) or " + MIN_SHADER_DISTANCE + " to " + MAX_SHADER_DISTANCE + " chunks, got " + chunks);
+		if (sent) {
+			modes.put(player.getUniqueId(), mode);
 		}
 
-		return send(player, new ShadersPacket.SetShaderDistance(chunks, locked));
+		return sent;
 	}
 
 	@Override
-	public int getShaderDistance(Player player) {
-		ShadersPacket.VistaState state = vista.get(player.getUniqueId());
-		return state == null ? 0 : state.chunks();
+	public ClientShaderMode getClientShaderMode(Player player) {
+		return modes.getOrDefault(player.getUniqueId(), ClientShaderMode.ALLOWED);
+	}
+
+	@Override
+	public Boolean isClientShaderOn(Player player) {
+		ShadersPacket.ClientShaderState state = clientStates.get(player.getUniqueId());
+		return state == null ? null : state.shaderOn();
 	}
 
 	private static Map<String, Object> plainValues(Map<String, ?> values) {
@@ -397,9 +397,9 @@ public final class PaperShaders implements SkaffyShaders, PluginMessageListener,
 
 				new SkaffyShaderStateEvent(player, state.className(), state.running()).callEvent();
 			}
-			case ShadersPacket.VistaState state -> {
-				vista.put(player.getUniqueId(), state);
-				new SkaffyVistaChangeEvent(player, state.enabled(), state.chunks(), state.byPlayer()).callEvent();
+			case ShadersPacket.ClientShaderState state -> {
+				clientStates.put(player.getUniqueId(), state);
+				new SkaffyClientShaderChangeEvent(player, state.shaderOn(), state.byPlayer()).callEvent();
 			}
 			default -> {
 			}
@@ -410,6 +410,7 @@ public final class PaperShaders implements SkaffyShaders, PluginMessageListener,
 	public void onQuit(PlayerQuitEvent event) {
 		enabled.remove(event.getPlayer().getUniqueId());
 		running.remove(event.getPlayer().getUniqueId());
-		vista.remove(event.getPlayer().getUniqueId());
+		clientStates.remove(event.getPlayer().getUniqueId());
+		modes.remove(event.getPlayer().getUniqueId());
 	}
 }

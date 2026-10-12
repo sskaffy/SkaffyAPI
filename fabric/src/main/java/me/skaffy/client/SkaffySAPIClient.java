@@ -50,6 +50,7 @@ public class SkaffySAPIClient implements ClientModInitializer {
 			me.skaffy.client.animation.ClientAnimations.tick();
 		});
 
+		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING.register(client -> me.skaffy.client.shader.ShaderPacks.shutdown());
 		ClientConfigurationConnectionEvents.START.register((listener, client) -> SkaffyConnection.startConfiguration(client));
 		ClientConfigurationConnectionEvents.COMPLETE.register((listener, client) -> SkaffyConnection.completeConfiguration());
 		ClientConfigurationConnectionEvents.DISCONNECT.register((listener, client) -> SkaffyConnection.disconnect());

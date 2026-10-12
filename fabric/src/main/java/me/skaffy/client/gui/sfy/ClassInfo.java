@@ -21,6 +21,7 @@ final class ClassInfo {
 	ClassInfo superClass;
 	Class<?> javaClass;
 	boolean valueType;
+	boolean extensible;
 	final Map<String, List<MethodInfo>> methods = new LinkedHashMap<>();
 	final Map<String, FieldInfo> fields = new LinkedHashMap<>();
 	MethodInfo sam;

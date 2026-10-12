@@ -63,7 +63,7 @@ final class UniformValues {
 		List<String> problems = new java.util.ArrayList<>();
 
 		for (Map.Entry<String, Object> entry : incoming.entrySet()) {
-			ShaderModule.Uniform uniform = find(entry.getKey());
+			ShaderModule.Uniform uniform = entry.getKey().startsWith("$") ? null : find(entry.getKey());
 
 			if (uniform == null) {
 				problems.add(module.className() + " has no @Uniform " + entry.getKey());
@@ -90,6 +90,15 @@ final class UniformValues {
 		}
 
 		return problems;
+	}
+
+	void setFileValue(String name, double value) {
+		double[] current = values.get(name);
+
+		if (current != null && current[0] != value) {
+			current[0] = value;
+			dirty = true;
+		}
 	}
 
 	private ShaderModule.Uniform find(String name) {

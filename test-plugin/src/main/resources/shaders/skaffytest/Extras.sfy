@@ -1,0 +1,147 @@
+package skaffytest;
+
+import skaffy.shader.*;
+
+public class Extras {
+    @Entities({"minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:zombie_villager"}) const int ZOMBIES = 1;
+    @Entities("#minecraft:skeletons") const int SKELETONS = 2;
+    @Entities("minecraft:player") const int PLAYERS = 3;
+    @Items({"minecraft:torch", "minecraft:lantern", "minecraft:soul_torch"}) const int LIGHTS = 1;
+    @Items("#minecraft:swords") const int SWORDS = 2;
+    @Biomes("#minecraft:is_ocean") const int OCEAN = 1;
+    @Biomes({"minecraft:desert", "minecraft:badlands", "minecraft:savanna"}) const int DRY = 2;
+    @Dimensions("minecraft:the_nether") const int HOT = 4;
+
+    @Option(name = "Tint strength", min = 0.0, max = 1.0, step = 0.05) @Uniform float strength = 0.7;
+    @Option(name = "Motion blur") @Uniform bool motionBlur = true;
+    @Option(name = "Glow size", values = {1, 2, 3, 4}) @Uniform int glowTaps = 2;
+
+    @Target Texture bright;
+
+    @Fragment(ENTITY)
+    vec4 entities(Fragment f) {
+        vec3 tint = f.entity == ZOMBIES ? #50FF50 : f.entity == SKELETONS ? #A0B0FF : f.entity == PLAYERS ? #FFD040 : vec3(1.0);
+
+        if (f.item == SWORDS) {
+            tint = #FF4040;
+        }
+
+        return vec4(mix(f.vanilla.rgb, f.vanilla.rgb * tint, strength), f.vanilla.a);
+    }
+
+    @Fragment(EYES)
+    vec4 eyes(Fragment f) {
+        return vec4(f.vanilla.rgb * vec3(0.3, 1.2, 1.6), f.vanilla.a);
+    }
+
+    @Fragment(ITEM)
+    vec4 items(Fragment f) {
+        if (f.item == LIGHTS) {
+            return vec4(min(f.vanilla.rgb * 1.8, vec3(1.0)), f.vanilla.a);
+        }
+
+        return f.item == SWORDS ? vec4(f.vanilla.rgb * #FF8080, f.vanilla.a) : f.vanilla;
+    }
+
+    @Fragment(LINES)
+    vec4 lines(Fragment f) {
+        vec3 rainbow = 0.5 + 0.5 * cos(time * 2.0 + f.worldPos.x * 0.5 + vec3(0.0, 2.1, 4.2));
+        return vec4(rainbow, max(f.vanilla.a, 0.6));
+    }
+
+    @Fragment(TEXT)
+    vec4 text(Fragment f) {
+        return vec4(f.vanilla.rgb * #FFE080, f.vanilla.a);
+    }
+
+    @Fragment(BEACON)
+    vec4 beacon(Fragment f) {
+        return vec4(f.vanilla.rgb * (0.7 + 0.3 * sin(time * 4.0)), f.vanilla.a);
+    }
+
+    @Fragment(PORTAL)
+    vec4 portal(Fragment f) {
+        return vec4(f.vanilla.bgr * 1.5, 1.0);
+    }
+
+    @Fragment(LIGHTNING)
+    vec4 lightning(Fragment f) {
+        return vec4(f.vanilla.rgb * #FF6040, f.vanilla.a);
+    }
+
+    @Fragment(GLINT)
+    vec4 glint(Fragment f) {
+        return vec4(f.vanilla.rgb * #FFC040, f.vanilla.a);
+    }
+
+    @Fragment(WEATHER)
+    vec4 weather(Fragment f) {
+        return vec4(f.vanilla.rgb * #6080FF, f.vanilla.a);
+    }
+
+    @Fragment(BREAKING)
+    vec4 breaking(Fragment f) {
+        return vec4(f.vanilla.rgb * #FF3030, f.vanilla.a);
+    }
+
+    @Fragment(WORLD_BORDER)
+    vec4 border(Fragment f) {
+        return vec4(f.vanilla.rgb * #40FF80, f.vanilla.a);
+    }
+
+    @Pass
+    vec4 grade(vec2 uv) {
+        vec3 color = texture(SCREEN, uv).rgb;
+        vec3 tint = biome == OCEAN ? #A0C8FF : biome == DRY ? #FFD8A0 : vec3(1.0);
+        vec3 previous = previousBiome == OCEAN ? #A0C8FF : previousBiome == DRY ? #FFD8A0 : vec3(1.0);
+        tint = mix(previous, tint, biomeBlend);
+
+        if (dimension == HOT) {
+            tint *= #FFB0A0;
+        }
+
+        color = mix(color, color * tint, strength);
+        color = mix(color, vec3(luminance(color), 0.0, 0.0), hurtTime * 0.5 + (1.0 - playerHealth) * 0.3);
+
+        if (isSneaking) {
+            float edge = length(uv - 0.5);
+            color *= 1.0 - smoothstep(0.3, 0.75, edge) * 0.6;
+        }
+
+        float light = luminance(color);
+        write(bright, vec4(color * smoothstep(0.75, 1.0, light), 1.0));
+        return vec4(color, 1.0);
+    }
+
+    @Pass(blend = ADD)
+    vec4 glow(vec2 uv) {
+        vec3 sum = vec3(0.0);
+        final int taps = glowTaps;
+        vec2 step = texelSize(bright) * 3.0;
+
+        for (int x = -taps; x <= taps; x++) {
+            for (int y = -taps; y <= taps; y++) {
+                sum += texture(bright, uv + vec2(float(x), float(y)) * step).rgb;
+            }
+        }
+
+        float count = float((taps * 2 + 1) * (taps * 2 + 1));
+        return vec4(sum / count * 0.6, 1.0);
+    }
+
+    @Pass(when = motionBlur)
+    vec4 blur(vec2 uv) {
+        vec3 world = relativePos(uv);
+        vec2 now = toScreen(world);
+        vec4 previousClip = previousProjectionMatrix * (previousViewMatrix * vec4(world + cameraPosition - previousCameraPosition, 1.0));
+        vec2 before = previousClip.xy / previousClip.w * 0.5 + 0.5;
+        vec2 motion = clamp(now - before, vec2(-0.05), vec2(0.05)) * 0.5;
+        vec3 sum = vec3(0.0);
+
+        for (int i = 0; i < 6; i++) {
+            sum += texture(SCREEN, uv - motion * (float(i) / 5.0)).rgb;
+        }
+
+        return vec4(sum / 6.0, 1.0);
+    }
+}

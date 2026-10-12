@@ -39,5 +39,4 @@ SkVertex skSkyVertex(vec3 position, vec4 color, vec2 uv) {
     return v;
 }
 
-
 #endif

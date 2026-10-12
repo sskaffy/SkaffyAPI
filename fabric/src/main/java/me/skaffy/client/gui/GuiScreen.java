@@ -75,7 +75,7 @@ final class GuiScreen extends Screen {
 		closing = true;
 
 		if (isCurrent()) {
-			Minecraft.getInstance().gui.setScreen(null);
+			Minecraft.getInstance().gui.setScreen(session.local ? session.parent : null);
 		}
 	}
 
@@ -109,7 +109,14 @@ final class GuiScreen extends Screen {
 
 	@Override
 	public boolean isPauseScreen() {
-		return false;
+		return session.local;
+	}
+
+	@Override
+	public void onFilesDrop(java.util.List<java.nio.file.Path> files) {
+		if (session.local) {
+			session.filesDropped(files);
+		}
 	}
 
 	@Override
@@ -134,6 +141,10 @@ final class GuiScreen extends Screen {
 	@Override
 	public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		GuiDocument document = document();
+
+		if (session.local && Minecraft.getInstance().level == null) {
+			this.extractPanorama(graphics, a);
+		}
 
 		if (document.menuBackground) {
 			Screen.extractMenuBackgroundTexture(graphics, INWORLD_MENU_BACKGROUND, 0, 0, 0, 0, width, height);
@@ -257,7 +268,7 @@ final class GuiScreen extends Screen {
 
 			if (previous instanceof GuiScreen gui) {
 				gui.linkPrompt = false;
-				minecraft.gui.setScreen(gui.session.ended() ? null : gui);
+				minecraft.gui.setScreen(gui.session.ended() ? gui.session.local ? gui.session.parent : null : gui);
 			} else {
 				minecraft.gui.setScreen(previous);
 			}

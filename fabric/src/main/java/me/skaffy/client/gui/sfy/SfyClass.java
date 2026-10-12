@@ -32,10 +32,20 @@ public final class SfyClass {
 	}
 
 	public static SfyClass compile(SfyLibrary lib, String qualifiedName, String source) throws CompileException {
+		return compile(lib, qualifiedName, source, null);
+	}
+
+	public static SfyClass compile(SfyLibrary lib, String qualifiedName, String source, java.util.Set<String> knownClasses) throws CompileException {
 		lib.freeze();
 		int dot = qualifiedName.lastIndexOf('.');
 		String file = (dot < 0 ? qualifiedName : qualifiedName.substring(dot + 1)) + ".sfy";
-		return new Compiler(lib, file).compileFile(source, qualifiedName);
+		Compiler compiler = new Compiler(lib, file);
+		compiler.knownClasses = knownClasses;
+		return compiler.compileFile(source, qualifiedName);
+	}
+
+	public String superName() {
+		return info.superClass != null && info.superClass.extensible ? info.superClass.name : null;
 	}
 
 	public String qualifiedName() {

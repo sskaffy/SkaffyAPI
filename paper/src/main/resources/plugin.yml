@@ -4,7 +4,7 @@ main: me.skaffy.paper.SkaffyPlugin
 api-version: '26.3'
 description: Client sided APIs for servers.
 authors: [Skaffy]
-website: https://github.com/sskaffy/SkaffyAPI
+website: https://github.com/sskaffy
 folia-supported: true
 
 commands:

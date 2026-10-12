@@ -4,10 +4,6 @@
 	"description": "Syntax coloring for .sfy GUI and shader files of Skaffy's API",
 	"version": "1.0.0",
 	"publisher": "skaffy",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/sskaffy/SkaffyAPI"
-	},
 	"engines": {
 		"vscode": "^1.60.0"
 	},

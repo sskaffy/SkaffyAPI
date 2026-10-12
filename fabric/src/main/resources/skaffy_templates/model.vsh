@@ -44,6 +44,8 @@ void main() {
     v.sk_skyLight = unlit ? 1.0 : float(SkLight.y) / 240.0;
     v.sk_top = false;
     v.sk_isHand = false;
+    v.sk_entity = 0;
+    v.sk_item = 0;
     sk_vertexHook(v);
 
 #ifdef SK_SHADOW_PASS

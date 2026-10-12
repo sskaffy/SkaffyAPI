@@ -79,6 +79,9 @@ void main() {
     f.sk_emission = vec3(0.0);
     f.sk_hasMaterial = false;
     f.sk_unlit = false;
+    f.sk_entity = 0;
+    f.sk_item = 0;
+    f.sk_emissive = false;
     vec4 result = sk_fragmentHook(f);
 
     #ifdef OIT_ALPHA_ONLY

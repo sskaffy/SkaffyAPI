@@ -525,7 +525,7 @@ How players are drawn on clients with the mod: the player model changed (skin, a
 - **Hitbox:** without one it's the look's size: the player's own times the scale (times the custom model's scale), or the entity's size for its pose times the scale. A custom hitbox is that size, whatever the pose. Sleeping players keep vanilla's. It's used for aiming, hitting, F3+B, pushing and the name tag's height. On the player's own client it only counts with "own hitbox": then it's also their collisions and camera height (the server keeps its own hitbox and may pull them back).
 - **Show to self:** off means the player sees themselves like vanilla (third person, inventory, hand); others still see the look.
 
-## Feature: shaders (`skaffy:shaders`, version 1)
+## Feature: shaders (`skaffy:shaders`, version 2)
 
 Shaders written as .sfy files (SHADERS.md describes the language). Like GUI files, the server sends them as UTF-8 text and never reads them; the client compiles them (into GLSL that Minecraft builds for Vulkan or OpenGL) and keeps them in memory only. Files are known by their class name (package and class joined by dots, like `effects.Dream`, at most 128 characters). A file must import `skaffy.shader`, and may import other shader files (helper classes) by class name or package.
 
@@ -539,8 +539,7 @@ Shaders written as .sfy files (SHADERS.md describes the language). Like GUI file
 | 3 | Disable | String(128) class name |
 | 4 | DisableAll | – |
 | 5 | SetUniforms | String(128) class name, Uniforms, VarInt duration (ms, 0 to 600000), Byte easing |
-| 6 | SetVista | Byte state: 0 off, 1 on, 2 the player's own setting; Boolean locked |
-| 7 | SetShaderDistance | VarInt chunks (2 to 32, or 0 for the player's own setting), Boolean locked |
+| 6 | SetClientShaders | Byte mode: 0 allowed, 1 off, 2 forced off |
 
 - **Uniforms:** VarInt count (at most 256), then per uniform String(64) name (a Java identifier, or `Class.field` for a @Uniform of a helper class the file imports) and a Value as in `skaffy:gui`. Numbers for float/int/bool uniforms, booleans for bools, a List of numbers for vectors and matrices (matrices column by column), or a String `#RRGGBB` / `#AARRGGBB` (or an Int ARGB) for `vec3`/`vec4`.
 - **Easing:** the 31 easings of easings.net, in the order `LINEAR`, `EASE_IN_SINE`, `EASE_OUT_SINE`, `EASE_IN_OUT_SINE`, then `IN`/`OUT`/`IN_OUT` for `QUAD`, `CUBIC`, `QUART`, `QUINT`, `EXPO`, `CIRC`, `BACK`, `ELASTIC`, `BOUNCE` (as in `skaffy:fov`).
@@ -551,14 +550,14 @@ Shaders written as .sfy files (SHADERS.md describes the language). Like GUI file
 |---|---|---|
 | 0 | Error | String(128) class name, Byte kind: 0 compile, 1 runtime, 2 request, String(8192) message |
 | 1 | State | String(128) class name, Boolean running |
-| 2 | VistaState | Boolean on, VarInt Shader Distance (chunks, 2 to 32), Boolean by player |
+| 2 | ClientShaderState | Boolean the player's own shader is on, Boolean by player |
 
 ### Rules
 
 - **Files:** chunks are sent in order from offset 0; the file is compiled when its bytes reach the total size. Sending a class again replaces it: an enabled effect switches to the new version and keeps uniform values whose name and size still fit. Files can be sent during registration and any time in play. Client limits: 512 KiB per file, 8 MiB together (a file over the total is ignored and reported as a compile error). A file that doesn't compile is reported (Error, compile) with every mistake as `File.sfy:line:column: message` (mistakes in an imported class name that class's file).
 - **Imports:** a file that imports a class the client doesn't have yet isn't reported right away: it compiles again when that class arrives, and its mistakes are reported if it's enabled before then. Sending, replacing or removing a class compiles the files that import it (directly or through other classes) again.
 - **Enable** turns an effect on, or changes the order and values of one that's on. The client builds it in the background and sends State (running) once it draws; until then nothing changes on screen. Enabling a file that isn't compiled (not sent, or broken) is reported (Error, request) and remembered: it starts when a working version arrives.
-- **Order:** effects run lower order first (ties by class name). Each world program (terrain, block, entity, item, particle, sky, clouds) uses the hooks of the highest enabled effect that has hooks for it. Frame-wide settings (the sun's path, the shadow map, colored light types) come from the highest running effect that has them; hdr and TAA are on when any running effect wants them, and the @Output fields of all enabled effects (at most 7 together, lower order first) are drawn next to the level's color.
+- **Order:** effects run lower order first (ties by class name). Each world program (terrain, block, entity, item, particle, sky, clouds, lines, text, beacon, portal, lightning, glint, weather, breaking, world border, eyes) uses the hooks of the highest enabled effect that has hooks for it (an effect with entity hooks but no eyes hooks draws eyes with its entity hooks, and particle hooks draw weather the same way). Frame-wide settings (the sun's path, the shadow map, colored light types) come from the highest running effect that has them; hdr and TAA are on when any running effect wants them, and the @Output fields of all enabled effects (at most 7 together, lower order first) are drawn next to the level's color.
 - **Frame layout:** when enabling or disabling changes hdr or the @Output fields, every effect is built again and they all pause until each is ready (State is sent for the pause and the restart).
 - **SetUniforms** sets values right away (duration 0) or animates them from their current values at the client's frame rate; ints round, bools switch at the end. Unknown uniforms and values that don't fit are reported (Error, request); the other values are still set.
 - **Runtime errors:** if building or drawing an effect fails, the client turns it off, sends Error (runtime) and State (not running).
@@ -566,14 +565,13 @@ Shaders written as .sfy files (SHADERS.md describes the language). Like GUI file
 - Effects last through death, respawn and world changes, and end with the session. Disable and DisableAll send State (not running) for effects that were running.
 - **Timing:** apart from files during registration, send shaders packets only to clients that enabled `shaders` and are ready.
 
-### Vista and the Shader Distance
+### The player's own shader
 
-Vista (`skaffy.vista.Vista`) is a shader built into the mod. Players turn it on in Video Settings (in the row below Graphics API, next to the Shader Distance slider); it runs in single player and on servers without this protocol too, below every server effect (as if its order were lower than any other).
+Players pick their own shader in Video Settings → Shader Packs: Vista (built into the mod, `skaffy.vista`) or a shader pack from their `.minecraft/shaders/` folder (SHADERS.md). It runs in single player and on servers without this protocol too, below every server effect (as if its order were lower than any other). Servers never learn which one it is and can't change or read its files or uniforms.
 
-- **Reserved classes:** classes in `skaffy.` packages belong to the mod. FileChunk, RemoveFile, Enable and Disable for them are reported (Error, request) and ignored; DisableAll doesn't touch Vista. SetUniforms on `skaffy.vista.Vista` works like for any file (names like `wind` or `Clouds.shadows`); values the server set this session are kept while Vista is off and applied when it starts, and Vista's uniforms go back to its own values when the session ends.
-- **SetVista** turns Vista on or off (or back to the player's own setting) for this session; nothing is saved on the client. **Locked** greys out the button in Video Settings until a SetVista unlocks it or the session ends. Without a lock the player can still click it: their click is saved as their own setting and replaces the server's.
-- **SetShaderDistance** does the same for the Shader Distance slider. The Shader Distance limits every effect: shadows (the file's shadowDistance) and the colored light box (the file's coloredLightRange) never reach further, and files can fade their own effects with the built-in `effectDistance`. It's never past the player's render distance.
-- **VistaState** is sent once when the session is ready, after every SetVista and SetShaderDistance (by player false: the state now in effect), and whenever the player changes either in Video Settings (by player true). It says whether Vista is on (it may still be building: State for `skaffy.vista.Vista` says when it draws) and the Shader Distance setting.
+- **Reserved classes:** classes in `skaffy.` packages belong to the mod. FileChunk, RemoveFile, Enable, Disable and SetUniforms for them are reported (Error, request) and ignored. The player's shader is kept apart from server files: a pack class with the same name as a server file is a different effect, and DisableAll never touches it.
+- **SetClientShaders** sets what the player's shader may do for the rest of the session; nothing is saved on the client. **Allowed** (the default): the player's choice. **Off**: their shader stops; they can pick one again in the menu, which ends the Off. **Forced off**: their shader stops and the Shader Packs button can't be used (an open menu closes) until the server allows it again or the session ends. When it's allowed again, the shader they had picked comes back (nothing, if that pack is gone).
+- **ClientShaderState** is sent once when the session is ready, after every SetClientShaders (by player false: the state now in effect), and whenever the player picks a shader in the menu (by player true). It only says whether a shader of the player's own is on (it may still be building).
 
 ## Feature: block shapes (`skaffy:block_shapes`, version 1)
 

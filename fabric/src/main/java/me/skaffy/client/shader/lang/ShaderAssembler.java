@@ -58,8 +58,16 @@ final class ShaderAssembler {
 			block.append('\t').append(glslType).append(' ').append(field.glsl).append(bool ? "_i" : "").append(";\n");
 		}
 
-		int blockSize = uniforms.isEmpty() ? 0 : (offset + 15) / 16 * 16;
-		String uniformBlock = uniforms.isEmpty() ? "" : "layout(std140) uniform SkUniforms {\n" + block + "};\n\n";
+		for (String name : Builtins.FILE_VALUES) {
+			boolean floating = name.equals("$biomeBlend");
+			ShType type = floating ? ShType.FLOAT : ShType.INT;
+			uniforms.add(new ShaderModule.Uniform(name, type.name(), type.base(), 1, false, offset, new double[] {name.equals("$dimension") ? -1 : 0}));
+			offset += 4;
+			block.append('\t').append(type.glsl()).append(" sk_file_").append(name.substring(1)).append(";\n");
+		}
+
+		int blockSize = (offset + 15) / 16 * 16;
+		String uniformBlock = "layout(std140) uniform SkUniforms {\n" + block + "};\n\n";
 
 		List<ShaderModule.TextureSource> textures = new ArrayList<>();
 		List<ShaderModule.Target> targets = new ArrayList<>();
@@ -67,6 +75,8 @@ final class ShaderAssembler {
 		List<ShaderModule.Light> lights = new ArrayList<>();
 		List<ShaderModule.Light> filters = new ArrayList<>();
 		Map<Integer, List<String>> materials = new TreeMap<>();
+		Map<String, Map<Integer, List<String>>> ids = new TreeMap<>();
+		List<ShaderModule.Option> options = new ArrayList<>();
 		StringBuilder lightDefines = new StringBuilder();
 
 		for (FieldSym field : checked.fields()) {
@@ -78,9 +88,17 @@ final class ShaderAssembler {
 					if (field.blocks != null) {
 						materials.computeIfAbsent(field.value.intValue(), key -> new ArrayList<>()).addAll(field.blocks);
 					}
+
+					if (field.ids != null) {
+						ids.computeIfAbsent(field.idKind, key -> new TreeMap<>()).computeIfAbsent(field.value.intValue(), key -> new ArrayList<>()).addAll(field.ids);
+					}
 				}
 				default -> {
 				}
+			}
+
+			if (field.option != null) {
+				options.add(field.option);
 			}
 
 			boolean uniform = field.kind == FieldSym.Kind.UNIFORM;
@@ -106,7 +124,11 @@ final class ShaderAssembler {
 
 		for (MethodSym method : checked.methods()) {
 			switch (method.kind) {
-				case PASS -> passes.add(assembler.pass(method));
+				case PASS -> {
+					if (method.when == null || method.when.kind != FieldSym.Kind.CONST || method.when.value.boolValue()) {
+						passes.add(assembler.pass(method));
+					}
+				}
 				case VERTEX -> method.programs.forEach(program -> vertexHooks.put(program, method));
 				case FRAGMENT -> method.programs.forEach(program -> fragmentHooks.put(program, method));
 				default -> {
@@ -149,8 +171,8 @@ final class ShaderAssembler {
 		}
 
 		return new ShaderModule(checked.className(), List.copyOf(uniforms), blockSize, List.copyOf(textures), List.copyOf(targets), List.copyOf(outputs),
-				materials, List.copyOf(lights), List.copyOf(filters), List.copyOf(passes), hooks, shadowHooks, settings, usesShadows, usesSolid, usesLight,
-				java.util.Set.copyOf(dependencies));
+				materials, ids, List.copyOf(lights), List.copyOf(filters), List.copyOf(passes), hooks, shadowHooks, settings, usesShadows, usesSolid, usesLight,
+				List.copyOf(options), java.util.Set.copyOf(dependencies));
 	}
 
 	private static ShaderModule.Settings settings(Checked checked) {
@@ -313,14 +335,32 @@ final class ShaderAssembler {
 	private ShaderModule.Pass pass(MethodSym pass) {
 		List<MethodSym> methods = ShaderChecker.reachable(pass);
 		Set<String> samplers = samplers(methods);
+		Set<FieldSym> written = new LinkedHashSet<>();
+
+		for (MethodSym method : methods) {
+			method.outputsWritten.stream().filter(field -> field.kind == FieldSym.Kind.TARGET).forEach(written::add);
+		}
+
 		StringBuilder code = new StringBuilder(HEADER);
-		code.append("#define SK_TEXTURE(t, uv) texture(t, uv)\n\n");
+		code.append("#define SK_TEXTURE(t, uv) texture(t, uv)\n");
+		int location = 1;
+		StringBuilder init = new StringBuilder();
+
+		for (FieldSym target : written) {
+			code.append("layout(location = ").append(location++).append(") out vec4 SkOut_").append(target.glsl).append(";\n");
+			code.append("#define SK_WRITE_").append(target.glsl).append("(v) SkOut_").append(target.glsl).append(" = (v)\n");
+			init.append("\tSkOut_").append(target.glsl).append(" = vec4(0.0);\n");
+		}
+
+		code.append('\n');
 		common(code, methods, samplers);
 		methods(code, methods);
 		code.append("layout(location = 0) in vec2 sk_passUv;\n");
 		code.append("layout(location = 0) out vec4 sk_fragColor;\n\n");
-		code.append("void main() {\n\tsk_fragColor = ").append(pass.glsl).append(pass.takesUv ? "(sk_passUv)" : "()").append(";\n}\n");
-		return new ShaderModule.Pass(pass.name, pass.stage, pass.output == null ? null : pass.output.name, pass.blend, code.toString(), List.copyOf(samplers));
+		code.append("void main() {\n").append(init).append("\tsk_fragColor = ").append(pass.glsl).append(pass.takesUv ? "(sk_passUv)" : "()").append(";\n}\n");
+		String when = pass.when != null && pass.when.kind == FieldSym.Kind.UNIFORM ? pass.when.serverName : null;
+		return new ShaderModule.Pass(pass.name, pass.stage, pass.output == null ? null : pass.output.name, pass.blend, code.toString(), List.copyOf(samplers), when,
+				written.stream().map(field -> field.name).toList());
 	}
 
 	private void varyings(StringBuilder code, String direction) {

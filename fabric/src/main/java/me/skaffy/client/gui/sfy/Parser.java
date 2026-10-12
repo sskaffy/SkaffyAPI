@@ -11,6 +11,7 @@ import me.skaffy.client.gui.sfy.Ast.Binary;
 import me.skaffy.client.gui.sfy.Ast.Block;
 import me.skaffy.client.gui.sfy.Ast.Break;
 import me.skaffy.client.gui.sfy.Ast.Call;
+import me.skaffy.client.gui.sfy.Ast.ClassLit;
 import me.skaffy.client.gui.sfy.Ast.Case;
 import me.skaffy.client.gui.sfy.Ast.Cast;
 import me.skaffy.client.gui.sfy.Ast.Catch;
@@ -143,17 +144,26 @@ final class Parser {
 		Token nameToken = peek();
 		String className = identifier("class name");
 
-		if (peek().is("extends") || peek().is("implements")) {
-			throw error(peek(), "Classes can't extend or implement anything in .sfy");
-		}
-
 		if (peek().is("<")) {
 			throw error(peek(), "The class can't have type parameters");
 		}
 
+		String superName = null;
+		Pos superPos = null;
+
+		if (peek().is("extends")) {
+			next();
+			superPos = peek().pos();
+			superName = identifier("class to extend");
+		}
+
+		if (peek().is("extends") || peek().is("implements")) {
+			throw error(peek(), superName != null ? "A class extends one class and implements nothing in .sfy" : "Classes can't implement anything in .sfy");
+		}
+
 		List<Member> members = classBody(className, false);
 		expectEnd();
-		return new Unit(name.toString(), packagePos, imports, new ClassDecl(className, modifiers, members, nameToken.pos()));
+		return new Unit(name.toString(), packagePos, imports, new ClassDecl(className, modifiers, members, nameToken.pos(), superName, superPos));
 	}
 
 	private List<Member> classBody(String className, boolean inRecord) throws CompileException {
@@ -1000,6 +1010,17 @@ final class Parser {
 		}
 	}
 
+	private static String dottedName(Expr expr) {
+		return switch (expr) {
+			case Name name -> name.name();
+			case Select select -> {
+				String target = dottedName(select.target());
+				yield target == null ? null : target + "." + select.name();
+			}
+			default -> null;
+		};
+	}
+
 	private Expr postfix(Expr expr) throws CompileException {
 		while (true) {
 			Token token = peek();
@@ -1011,7 +1032,18 @@ final class Parser {
 					throw error(peek(), "Explicit type arguments (x.<T>m()) don't exist in .sfy");
 				}
 
-				if (peek().is("new") || peek().is("this") || peek().is("class")) {
+				if (peek().is("class")) {
+					String className = dottedName(expr);
+
+					if (className == null) {
+						throw error(peek(), "'.class' goes after a class name, like World.class");
+					}
+
+					expr = new ClassLit(className, next().pos());
+					continue;
+				}
+
+				if (peek().is("new") || peek().is("this")) {
 					throw error(peek(), "'." + peek().text() + "' doesn't exist in .sfy");
 				}
 

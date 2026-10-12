@@ -1,4 +1,3 @@
-
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
@@ -14,7 +13,6 @@ layout(location = 1) in vec4 Color;
 layout(location = 0) out vec4 skColor;
 layout(location = 1) out vec3 skDirection;
 layout(location = 2) out vec3 skPosition;
-
 
 void main() {
     SkVertex v = skSkyVertex(Position, Color, vec2(0.0));

@@ -1,6 +1,13 @@
 # .sfy shaders for Skaffy's API
 
-A shader file is a `.sfy` file that changes how a player's game is drawn. The server sends the file as text; the player's client compiles it and hands it to Minecraft's own shader compiler, which builds it for **Vulkan** (SPIR-V) or **OpenGL** (GLSL 330), whichever the player uses. You write one file, and it works on both. No Iris, Sodium or OptiFine is involved.
+A shader file is a `.sfy` file that changes how a player's game is drawn. The player's client compiles it and hands it to Minecraft's own shader compiler, which builds it for **Vulkan** (SPIR-V) or **OpenGL** (GLSL 330), whichever the player uses. You write one file, and it works on both. No Iris, Sodium or OptiFine is involved.
+
+Shader files reach a player two ways:
+
+- **From a server:** a plugin sends them as text and turns them on per player ([The plugin API](#the-plugin-api)).
+- **As a shader pack:** the player puts a zip or folder in `.minecraft/shaders/` and picks it in Video Settings → Shader Packs, like Iris ([Shader packs](#shader-packs)). Vista, the shader built into the mod, is one too.
+
+Both use the same language. A server's shaders always draw on top of the player's own.
 
 A file can do two things, alone or together:
 
@@ -115,9 +122,10 @@ A pass runs once for every pixel of its output and returns that pixel's color. `
 
 | Option | Values |
 |---|---|
-| `stage` | `WORLD`: after the world, before the hand (the hand isn't affected). `SCREEN` (default): after the hand, before the HUD. `FINAL`: over everything, the HUD and open menus too. |
+| `stage` | `DEFERRED`: after solid blocks and entities, before see-through things (water, glass, clouds, particles) and the hand. `WORLD`: after the world, before the hand (the hand isn't affected). `SCREEN` (default): after the hand, before the HUD. `FINAL`: over everything, the HUD and open menus too. |
 | `output` | `SCREEN` (default) or a `@Target` field. Writing the screen only changes red, green and blue. |
 | `blend` | `REPLACE` (default), `ADD` (adds to what's there), `ALPHA` (mixes by the returned alpha), `MULTIPLY`. |
+| `when` | A bool `@Uniform` or constant of the file (often an [@Option](#options)): the pass only runs while it's true. A constant that's false leaves the pass out completely. |
 
 What passes read:
 
@@ -125,7 +133,23 @@ What passes read:
 - `texture(DEPTH, uv).r`: the depth buffer; easier through `linearDepth(uv)` (blocks from the camera, straight ahead), `viewPos(uv)`, `relativePos(uv)` (position relative to the camera, in world directions) and `worldPos(uv)` (world coordinates). These work the same on Vulkan and OpenGL. `isSky(uv)` is true where nothing was drawn. In `FINAL` passes, `DEPTH` is the world's depth from before the HUD.
 - Your `@Target` and `@Texture` fields.
 
+- `SOLID` and `SOLID_DEPTH`: the picture and depth with only the solid things, before see-through ones were drawn (for water that bends what's under it).
+- In `DEFERRED` passes, `SCREEN` is the solid world so far, and `@Output` pictures the world hooks wrote (below).
+
 A pass may read the texture it writes; it then reads a copy made just before.
+
+A pass can also draw into more `@Target` fields at once with `write(target, value)`, next to the color it returns: every pixel of those targets gets what the pass wrote there (or see-through black where it didn't). They must be the same size as the pass's output, the pass can't read them, and they're always replaced (no blending).
+
+```java
+@Target Texture bright;
+
+@Pass
+vec4 grade(vec2 uv) {
+    vec3 color = texture(SCREEN, uv).rgb;
+    write(bright, vec4(color * step(0.8, luminance(color)), 1.0));   // a second picture, in the same pass
+    return vec4(color, 1.0);
+}
+```
 
 ### Targets
 
@@ -140,7 +164,7 @@ A pass may read the texture it writes; it then reads a copy made just before.
 |---|---|---|
 | `scale` | 1 | Size compared to the screen (above 0, at most 4) |
 | `width`, `height` | | A fixed size instead (both, 1 to 8192) |
-| `format` | `RGBA16F` | `RGBA16F` (half floats, can go above 1) or `RGBA8` |
+| `format` | `RGBA16F` | `RGBA16F` (half floats, can go above 1), `RGBA32F` (full floats, for positions and other precise values) or `RGBA8` |
 | `persistent` | false | Keep last frame's picture; otherwise it starts every frame see-through black |
 | `filter` | `LINEAR` | How reading between pixels works: `LINEAR` or `NEAREST` |
 
@@ -186,12 +210,23 @@ Hooks plug into Skaffy's copies of vanilla's shaders, so every vanilla variant k
 | `PARTICLE` | Particles, rain and snow |
 | `SKY` | The sky, sunrise glow, stars, sun, moon, the End sky |
 | `CLOUDS` | Clouds |
+| `LINES` | Block outlines, hitboxes and other lines, leads |
+| `TEXT` | Text in the world: signs, name tags (also the ones seen through walls) |
+| `BEACON` | Beacon beams |
+| `PORTAL` | End portals and End gateways |
+| `LIGHTNING` | Lightning bolts |
+| `GLINT` | The enchantment glint drawn over items and armor |
+| `WEATHER` | Rain and snow (without `WEATHER` hooks, a file's `PARTICLE` hooks draw them) |
+| `BREAKING` | The cracks on a block being broken |
+| `WORLD_BORDER` | The world border |
+| `EYES` | Glowing layers of entities: spider and Enderman eyes, charged creepers, ... (without `EYES` hooks, a file's `ENTITY` hooks draw them; `f.emissive` is true there) |
+| `SHADOW` | What draws the shadow map ([Shadow casters](#shadow-casters)) |
 
-They change the world and the first-person hand, never items or mobs drawn in menus or the HUD. If several enabled files hook the same program, the one with the highest order wins that program (its other programs and passes still run).
+They change the world and the first-person hand, never items or mobs drawn in menus or the HUD. If several enabled files hook the same program, the one with the highest order wins that program (its other programs and passes still run). `LINES` and `LIGHTNING` have no texture, so their hooks can't read `SOURCE`.
 
-**`Vertex v`**, changeable: `position` (vec3, relative to the camera), `color` (vec4), `uv` (vec2). Read only: `worldPos` (where the vertex was, in world coordinates), `normal`, `material` (int), `top` (bool: in the upper half of its block, so plants bend at the top and stay planted), `blockLight`, `skyLight` (0 to 1), `isHand`.
+**`Vertex v`**, changeable: `position` (vec3, relative to the camera), `color` (vec4), `uv` (vec2). Read only: `worldPos` (where the vertex was, in world coordinates), `normal`, `material` (int), `top` (bool: in the upper half of its block, so plants bend at the top and stay planted), `blockLight`, `skyLight` (0 to 1), `isHand`, `entity` and `item` (the [@Entities and @Items](#entities-items-biomes-and-dimensions) numbers).
 
-**`Fragment f`**, all read only: `albedo` (texture × tint, without light), `color` (vanilla's tint with its shading and ambient occlusion), `texture`, `lightmap` (vanilla's light color), `blockLight`, `skyLight`, `normal` (facing the camera), `position` (relative to the camera), `worldPos`, `uv`, `material`, `vanilla` (exactly what vanilla would draw, before fog), `isHand`, and for the sky `direction` (where that pixel looks) and `part` (`SKY`, `SUNRISE`, `STARS`, `SUN`, `MOON`, `END_SKY`, `END_FLASH`).
+**`Fragment f`**, all read only: `albedo` (texture × tint, without light), `color` (vanilla's tint with its shading and ambient occlusion), `texture`, `lightmap` (vanilla's light color), `blockLight`, `skyLight`, `normal` (facing the camera), `position` (relative to the camera), `worldPos`, `uv`, `material`, `vanilla` (exactly what vanilla would draw, before fog), `isHand`, `entity` and `item` (the [@Entities and @Items](#entities-items-biomes-and-dimensions) numbers), `emissive` (a glowing layer, see `EYES`), and for the sky `direction` (where that pixel looks) and `part` (`SKY`, `SUNRISE`, `STARS`, `SUN`, `MOON`, `END_SKY`, `END_FLASH`).
 
 Models with their own materials (animation entities drawn from Blockbench projects and glTF models, in `ENTITY`) also fill in their material, so lighting can use it: `hasMaterial` (true when the part has a normal map or a metal/roughness/specular map), `mappedNormal` (the normal with its normal map applied; `normal` everywhere else), `roughness` (0 mirror-smooth to 1), `metallic` (0 to 1), `specular` (the color it reflects head-on: 0.04 for non-metals, its own color for metal; for specular-glossiness materials the map's strength times the material's specular color), `emission` (light it gives off by itself: a glTF emissive map, a Blockbench emissive texture or a MER map's glow; already in `vanilla`) and `unlit` (drawn without light, like glTF's unlit materials: `vanilla` is its plain color). Model parts without maps keep their material's plain values (glTF's roughness and metallic factors). Everything that isn't such a model has `hasMaterial` and `unlit` false, `mappedNormal` equal to `normal`, `roughness` 1, `metallic` 0, `specular` 0.04 and `emission` 0. Vista uses all of them.
 
@@ -207,6 +242,25 @@ A `@Fragment` hook returns the color; vanilla's fog is added afterwards, unless 
 `v.material` and `f.material` are the number of the block being drawn (0 if it isn't listed), on `TERRAIN`. Blocks are ids or `#tags`, numbers 1 to 4095. Turning a file with `TERRAIN` hooks on or off reloads the chunks once (a short stutter, like changing the render distance).
 
 Ids and tags can name block states too, like the `/setblock` syntax: `"minecraft:repeater[powered=true]"` or `"minecraft:copper_bulb[lit=true]"`. Several states are separated by commas and all must match; a tag's blocks that don't have the state are left out. A block named by its id wins over the same block in a tag.
+
+### Entities, items, biomes and dimensions
+
+```java
+@Entities({"minecraft:zombie", "minecraft:husk"}) const int ZOMBIES = 1;
+@Entities("#minecraft:skeletons") const int SKELETONS = 2;
+@Items("#minecraft:swords") const int SWORDS = 1;
+@Biomes("#minecraft:is_ocean") const int OCEAN = 1;
+@Dimensions("mymod:moon") const int MOON = 4;
+```
+
+Like `@Blocks`, each names ids or `#tags` (dimensions only ids) and gives them a number; an id wins over a tag.
+
+- `@Entities` (1 to 2047): `v.entity` / `f.entity` in `ENTITY` and `EYES` hooks is the number of the entity being drawn, and in `ITEM` hooks of the entity holding the item (0 when it isn't listed). Block entities (chests, signs, ...) are 0.
+- `@Items` (1 to 2047): `item` in `ITEM` hooks (and `ENTITY` hooks for items drawn with entity models, like shields) is the number of the item being drawn. `heldItem` and `heldItemOffhand` are the numbers of what the player holds.
+- `@Biomes` (1 to 4095): `biome` is the number of the biome at the camera. When it changes, `previousBiome` keeps the old one and `biomeBlend` goes from 0 to 1 over two seconds, so colors can change smoothly.
+- `@Dimensions` (4 to 4095): `dimension` is this number in a listed dimension (0 to 3 stay `OVERWORLD`, `NETHER`, `END` and `OTHER_DIMENSION`).
+
+Entity and item numbers need both `ENTITY` and `ITEM` to be hooked (by any enabled files); they're 0 otherwise.
 
 ### Light types
 
@@ -226,7 +280,7 @@ Each `@Light` field is one light type (up to 8) that spreads from its blocks lik
 | `coloredLight(vec3 world)` | The light at a world position: every type's level times its color, through any filters |
 | `lightLevel(TYPE, vec3 world)` | One type's level there, 0 to 1 (`TYPE` is the field, like `FIRE`) |
 | `lightLevel(vec3 world)` | The strongest type's level there, 0 to 1, before filters (how bright, without the glass's color) |
-| `inLightVolume(vec3 world)` | Whether the position is in the box around the camera where light types are worked out (`coloredLightRange` blocks wide, default 128, up to 256, but never wider than twice the player's Shader Distance) |
+| `inLightVolume(vec3 world)` | Whether the position is in the box around the camera where light types are worked out (`coloredLightRange` blocks wide, default 128, up to 256, but never wider than twice the player's render distance) |
 | `heldLight`, `heldLightColor` | The brightest light block in your hands, 0 to 1 (its type's level if it's one of yours, else vanilla's), and its type's color (white when it isn't one of your types) |
 
 Reading blends the light of the nearby blocks smoothly, but only of air, see-through blocks and light sources: walls next to a spot don't darken the light read there.
@@ -234,15 +288,29 @@ Reading blends the light of the nearby blocks smoothly, but only of air, see-thr
 ### The shadow map
 
 ```java
-@Uniform float shadowDistance = 512.0;    // how far shadows reach, in blocks (never past the player's Shader Distance)
+@Uniform float shadowDistance = 512.0;    // how far shadows reach, in blocks (never past the player's render distance)
 @Uniform int shadowResolution = 2048;     // pixels per cascade (a power of two, up to 4096)
 ```
 
-Using `SHADOW_MAP` (or `shadowPos`) turns the sun's shadow map on. It has three cascades: a sharp one close to the camera, a middle one, and one reaching `shadowDistance`, capped at the player's Shader Distance (`shadowRange` is what it really is this frame). `shadowPos(relative)` picks the sharpest cascade the position is in and returns where to look in `SHADOW_MAP`, `SHADOW_MAP_SOLID` and `SHADOW_COLOR` (x and y), and its depth (z); x and y are below 0 when it's outside every cascade. Read the maps only through `shadowPos`: `shadowMatrix` alone is the far cascade before it's placed in the texture.
+Using `SHADOW_MAP` (or `shadowPos`) turns the sun's shadow map on. It has three cascades: a sharp one close to the camera, a middle one, and one reaching `shadowDistance`, capped at the player's render distance (`shadowRange` is what it really is this frame). `shadowPos(relative)` picks the sharpest cascade the position is in and returns where to look in `SHADOW_MAP`, `SHADOW_MAP_SOLID` and `SHADOW_COLOR` (x and y), and its depth (z); x and y are below 0 when it's outside every cascade. Read the maps only through `shadowPos`: `shadowMatrix` alone is the far cascade before it's placed in the texture.
 
 ### Shadow casters
 
 A `@Fragment(SHADOW)` hook returns what a pixel of a block casts: alpha 1 blocks the sun, alpha below 1 lets it through tinted by the color (read back as `SHADOW_COLOR`). For cutout blocks (glass, leaves, plants) the texture's holes are cut out, unless the hook returns alpha below 1 for them: that's how clear glass can cast one even, soft shadow instead of its frame's pattern.
+
+### World outputs
+
+```java
+@Output Texture normals;                        // a screen-sized picture world hooks write next to the color
+@Output(format = RGBA8) Texture surface;
+
+@Fragment(TERRAIN) vec4 shade(Fragment f) {
+    write(normals, vec4(f.normal * 0.5 + 0.5, 1.0));
+    return f.vanilla;
+}
+```
+
+`@Output` fields are drawn into while the world is drawn, like a G-buffer: `@Fragment` hooks `write(output, value)`, and passes read them (best in `DEFERRED` and later stages). They start see-through black every frame. Enabled files can have 7 together (`RGBA16F` by default, `RGBA8`, `RGBA32F`; `filter = NEAREST` by default).
 
 ### Varyings
 
@@ -267,6 +335,30 @@ Vanilla's sun goes straight over your head, so at noon light that follows `sunDi
 
 ---
 
+## Frame settings
+
+Fields with these names set up the whole frame, like in shader packs. Only the enabled file can have them (not a class it imports); the highest running file that has one decides.
+
+| Field | |
+|---|---|
+| `const bool hdr = true;` | The world and passes draw into half-float pictures that can go above 1 (a pass should tone-map before `FINAL`); clamped before the HUD. Internal only: it isn't an HDR screen setting |
+| `const bool taa = true;` | The camera shifts a little every frame, for temporal anti-aliasing (see `taaOffset` and `previousProjectionMatrix`) |
+| `sunPathRotation` | [The sun's path](#the-suns-path) |
+| `shadowResolution`, `shadowDistance` | [The shadow map](#the-shadow-map) |
+| `const int coloredLightRange = 128;` | [Light types](#light-types) |
+
+## Options
+
+```java
+@Option(name = "Wind", description = "How much plants move", min = 0.0, max = 3.0, step = 0.1) @Uniform float wind = 1.0;
+@Option(name = "Bloom") @Uniform bool bloom = true;
+@Option(name = "Shadow quality", values = {1024, 2048, 4096}) @Uniform int shadowResolution = 2048;
+@Option(name = "Tint") @Uniform vec3 tint = #FFF4E8;
+@Option(name = "Waving plants") const bool WAVING = true;
+```
+
+`@Option` puts a field in a shader pack's settings (Shader Packs → Settings...), saved for the player in `.minecraft/shaders/settings/`. A bool is a switch, an int or float a slider (`min`, `max`, `step`) or a choice (`values`), a `vec3`/`vec4` a color. On a `@Uniform` it changes right away; on a constant (bool, int or float) the shader is built again with the new value, so loops and `@Pass(when = ...)` can depend on it. Helper classes can have options too (they're listed after the file's). For files sent by a server, `@Option` does nothing: the server sets uniforms itself.
+
 ## Built-in values
 
 | Name | Type | |
@@ -286,7 +378,6 @@ Vanilla's sun goes straight over your head, so at noon light that follows `sunDi
 | `fogColor` | vec4 | Vanilla's fog color right now |
 | `fogStart`, `fogEnd` | float | Vanilla's fog distances (water, lava, blindness, ...) |
 | `renderDistance` | float | In blocks |
-| `effectDistance` | float | The player's Shader Distance in blocks (Video Settings, never past the render distance): fade costly effects out by here |
 | `fov` | float | Degrees, as on screen |
 | `near`, `far` | float | Camera planes in blocks |
 | `eyeBlockLight`, `eyeSkyLight` | float | Light at the camera, 0 to 1 |
@@ -294,6 +385,25 @@ Vanilla's sun goes straight over your head, so at noon light that follows `sunDi
 | `isInWater`, `isInLava`, `isInPowderSnow` | bool | Where the camera is |
 | `cloudHeight` | float | The bottom of vanilla's cloud layer (y) |
 | `shadowRange` | float | How far the shadow map reaches this frame, in blocks |
+| `frameCounter` | int | Counts frames |
+| `taaOffset` | vec2 | This frame's camera shift with `taa` (in pixels) |
+| `wetness` | float | 0 to 1: rises while it rains on the player, dries slowly |
+| `heldLight`, `heldLightColor` | float, vec3 | See [Light types](#light-types) |
+| `biomeTemperature`, `biomeDownfall` | float | Of the biome at the camera |
+| `isSnowing` | bool | It's snowing at the camera |
+| `nightVision`, `darkness` | float | How strong those effects are, 0 to 1 |
+| `cameraVelocity` | vec3 | How fast the camera moves, blocks per second |
+| `playerHealth`, `playerHunger`, `playerAir` | float | 0 to 1 |
+| `hurtTime` | float | 1 right after the player is hurt, down to 0 |
+| `isSneaking`, `isSprinting`, `isGliding`, `isRiding`, `isSpectator` | bool | |
+| `eyeSkyLightSmooth`, `eyeBlockLightSmooth` | float | `eyeSkyLight` and `eyeBlockLight` smoothed over about a second (for eye adaptation) |
+| `lightningFlash`, `lightningPosition` | float, vec3 | 1 while a lightning bolt is there (fading quickly after; 0 with the Hide Lightning Flashes option), and where the nearest one is |
+| `skyColor`, `cloudColor` | vec3 | Vanilla's sky and cloud colors right now |
+| `bossDarkening` | float | How much a boss fight darkens the sky, 0 to 1 |
+| `gamma` | float | The player's Brightness option, 0 to 1 |
+| `aspectRatio` | float | Screen width divided by height |
+| `biome`, `previousBiome`, `biomeBlend` | int, int, float | See [@Biomes](#entities-items-biomes-and-dimensions) |
+| `heldItem`, `heldItemOffhand` | int | See [@Items](#entities-items-biomes-and-dimensions) |
 | `PI`, `TAU` | float | |
 | `SCREEN`, `DEPTH` | Texture | Passes only |
 
@@ -317,6 +427,68 @@ With `taa` on, `projectionMatrix` includes this frame's small camera shift (so `
 
 ---
 
+## Shader packs
+
+A shader pack is a zip or a folder in `.minecraft/shaders/`. Players add one by dropping it on the Shader Packs menu (it's copied there) or by putting it there themselves, and pick it in the menu; one is on at a time (or Vanilla: none). It works in single player and on every server, below the server's own shaders.
+
+```
+Ocean Dream/                       ← the folder (in a zip: the zip's only folder)
+├── shaders/
+│   └── oceandream/                ← your pack's package (the name doesn't show in game)
+│       ├── OceanDream.sfy         ← the main file
+│       ├── World.sfy              ← shader files
+│       ├── Post.sfy
+│       └── lib/Noise.sfy          ← subfolders are subpackages: oceandream.lib.Noise
+└── resources/
+    ├── icon.png
+    └── textures/waves.png         ← @Texture("textures/waves.png")
+```
+
+- A zip holds exactly one folder with `shaders/` and `resources/` in it; it's read into memory and never unpacked. A folder pack is that folder itself, read from disk again whenever the player presses Reload (handy while you work on it).
+- `shaders/` holds one folder: your top package. Every `.sfy` file's package must match its folders.
+- `resources/` holds PNGs, in folders if you like: `@Texture("...")` and `icon(...)` name them by their path inside `resources/`.
+- `shaders/skaffy/` belongs to the mod.
+
+### The main file
+
+One class in the pack extends `Shader`. It's ordinary .sfy code like a GUI file (it runs on the CPU, see SFY.md for the language), and it imports `skaffy.shader.*`:
+
+```java
+package oceandream;
+
+import skaffy.shader.*;
+
+public class OceanDream extends Shader {
+    public void onEnable() {
+        name("Ocean Dream");
+        icon("icon.png");                       // resources/icon.png
+        author("You");
+        version("1.2");
+        description("Calm seas and <aqua>bright water</aqua>.");   // MiniMessage, like GUI text
+        license("CC BY 4.0");
+        link("Website", "https://example.com");
+        register(World.class);                  // the shader classes it draws with, in draw order
+        register(Post.class);
+    }
+
+    public void onDisable() {
+    }
+}
+```
+
+- `onEnable` runs when the pack loads: when the game starts, when it's added, and on Reload. Whether the pack is on is a separate choice the player makes in the menu. `onDisable` (optional) runs when the game closes, before a Reload, and when the pack is removed.
+- `name(...)` is required (at most 64 characters). `icon`, `author`, `version`, `description`, `license` and `link(label, url)` (https only, at most 8) are optional; the menu shows them.
+- `register(Class.class)` adds a shader class the pack draws with (at most 16). Draw order is register order: the first one is drawn first. `World.class` names a class in the main file's package; others need their full name (`oceandream.lib.Thing.class`) or an import (`import oceandream.lib.Thing;`). Helper classes are only imported by the classes that use them, not registered.
+- `LOGGER.info(...)` writes to the game's log.
+
+### Mistakes in packs
+
+Everything wrong with a pack (its layout, the main file, a registered class that doesn't compile, a problem while it runs) shows under Problems in the menu and goes to the game's log. Nothing about a player's packs is ever sent to a server.
+
+### Limits for packs
+
+256 MiB per pack (zipped and unpacked), 4096 files, 512 KiB per `.sfy` file, 16 MiB per PNG, 16 registered classes.
+
 ## The plugin API
 
 `SkaffyAPI.get().getShaders()`:
@@ -334,24 +506,32 @@ With `taa` on, `projectionMatrix` includes this frame's small camera shift (so `
 
 Uniform values: numbers, booleans, lists of numbers for vectors and matrices (matrices column by column), `org.bukkit.Color` or `"#RRGGBB"` / `"#AARRGGBB"` for `vec3`/`vec4`, `org.bukkit.util.Vector` for `vec3`. Animated ints round, bools switch at the end.
 
-| `setVista(player, on)`, `setVista(player, on, locked)`, `resetVista(player)`, `isVistaOn(player)` | The built-in Vista for this session (see below) |
-| `setShaderDistance(player, chunks)`, `setShaderDistance(player, chunks, locked)`, `resetShaderDistance(player)`, `getShaderDistance(player)` | The Shader Distance for this session |
+| `setClientShaders(player, mode)`, `getClientShaderMode(player)` | What the player's own shader may do this session (below) |
+| `isClientShaderOn(player)` | Whether the player has their own shader on (never which one) |
 
-Events: `SkaffyShaderErrorEvent` (compile, runtime or request problems; cancel it to keep them out of the console), `SkaffyShaderStateEvent` (an effect started or stopped drawing) and `SkaffyVistaChangeEvent` (the player's client said how Vista and the Shader Distance are set: when they join, after you changed them, and when they change them in Video Settings, `isByPlayer()`).
+Events: `SkaffyShaderErrorEvent` (compile, runtime or request problems; cancel it to keep them out of the console), `SkaffyShaderStateEvent` (an effect started or stopped drawing) and `SkaffyClientShaderChangeEvent` (the player's client said whether their own shader is on: when they join, after `setClientShaders`, and when they pick one, `isByPlayer()`).
 
 Effects run in order, lower first, and last until they're turned off or the player leaves; they stay on through death, respawn and changing worlds. Nothing is saved.
 
-### Vista and the Shader Distance
+### The player's own shader
 
-Vista is a shader built into the mod (`SkaffyShaders.VISTA`, `skaffy.vista.Vista`; its files are in the mod's `skaffy_shaders/skaffy/vista/` as an example of a full shader pack). Players turn it on in Options → Video Settings, in the row below Graphics API; it works in single player and on servers without the plugin too. On your server it always runs below your effects: yours draw on top, and a world hook of yours replaces Vista's for that program. `setVista` turns it on or off while the player is on your server (`resetVista` gives it back to their own setting); with `locked` they can't change it until you unlock it or they leave. Its uniforms are set like any file's: `set(player, SkaffyShaders.VISTA, "wind", 3.0)`, `"Clouds.shadows"`, ... (they're forgotten when the player leaves). Classes in `skaffy.` packages are the mod's: they can't be added, enabled or disabled.
+Players pick their own shader in Video Settings → Shader Packs: Vista or one of their [shader packs](#shader-packs). Your effects always draw on top of it, and a world hook of yours replaces its hook for that program. You can't see which shader it is, read it or set its uniforms; you can only turn it off for the session:
 
-The **Shader Distance** slider next to it (2 to 32 chunks, never past the render distance) limits every shader, Vista's and yours: shadows and the colored light box never reach further, and `effectDistance` tells your file where to fade its own costly effects (Vista fades occlusion, bumps, reflections and clouds with it). `setShaderDistance` sets it for the session, like `setVista`.
+| `ClientShaderMode` | |
+|---|---|
+| `ALLOWED` | The player's choice (the default) |
+| `OFF` | Their shader is turned off; they can pick one again in the menu |
+| `FORCED_OFF` | Their shader is off and the Shader Packs button can't be used until you allow it again or they leave |
 
----
+Nothing changes on their side: when you allow it again, the shader they used last comes back. Classes in `skaffy.` packages are the mod's: they can't be added, enabled, disabled or set.
+
+### Vista
+
+Vista is the shader built into the mod, a full shader pack (its files are in the mod's `skaffy_shaders/vista/`, as an example of a big one): soft shadows, colored light, reflections, puddles, soft clouds, bloom and more, with its own settings (quality, effect distance, shadows, colors, ...).
 
 ## Limits
 
-- 512 KiB per file, 8 MiB of shader files per server.
+- 512 KiB per file, 8 MiB of shader files per server ([packs](#limits-for-packs) have their own).
 - 16 passes, 16 `@Target` fields and 8 `@Texture` fields per file.
 - A world pipeline reads at most 16 textures in all (Macs refuse more, and so may other drivers). Minecraft's own pipelines and Skaffy's models already use up to 5 of them for `TERRAIN` and up to 7 for `ENTITY` and `ITEM`, so a file's hooks for those can read 11 and 9: its `@Texture` and `@Target` fields and the built-in pictures they use (the shadow map, colored light, ...). Vista reads 8 in its entity hook.
 - Loops have no limit, but a shader that takes too long freezes the player's game (the driver may reset it).

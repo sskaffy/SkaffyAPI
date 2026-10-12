@@ -52,7 +52,7 @@ import me.skaffy.protocol.gui.GuiPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 
-final class GuiBindings {
+public final class GuiBindings {
 	private GuiBindings() {
 	}
 
@@ -133,6 +133,11 @@ final class GuiBindings {
 
 
 	static SfyLibrary create() {
+		return create(lib -> {
+		});
+	}
+
+	public static SfyLibrary create(java.util.function.Consumer<SfyLibrary> extras) {
 		SfyLibrary lib = new SfyLibrary();
 		lib.library("skaffy.gui");
 		lib.annotation("Gui");
@@ -153,6 +158,7 @@ final class GuiBindings {
 		misc(lib);
 		globals(lib);
 		HudData.register(lib);
+		extras.accept(lib);
 		lib.onGuiSwitch((instance, method) -> {
 			GuiSession session = ClientGuis.current();
 
@@ -967,6 +973,10 @@ final class GuiBindings {
 
 	private static void send(String name, Object[] values) {
 		GuiSession session = session();
+
+		if (session.local) {
+			throw new ScriptException("send(...) is for server GUIs");
+		}
 		List<Object> exported = new ArrayList<>(values.length);
 
 		for (Object value : values) {

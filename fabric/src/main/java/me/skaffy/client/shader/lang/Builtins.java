@@ -67,6 +67,14 @@ public final class Builtins {
 			new FrameField("float", "sk_heldLight"),
 			new FrameField("vec3", "sk_lightOrigin"),
 			new FrameField("float", "sk_wetness"),
+			new FrameField("vec3", "sk_cameraVelocity"),
+			new FrameField("float", "sk_playerHealth"),
+			new FrameField("vec3", "sk_skyColor"),
+			new FrameField("float", "sk_playerHunger"),
+			new FrameField("vec3", "sk_cloudColor"),
+			new FrameField("float", "sk_playerAir"),
+			new FrameField("vec3", "sk_lightningPosition"),
+			new FrameField("float", "sk_lightningFlash"),
 			new FrameField("vec2", "sk_screenSize"),
 			new FrameField("vec2", "sk_taaOffset"),
 			new FrameField("vec2", "sk_lightAtlasSize"),
@@ -85,7 +93,13 @@ public final class Builtins {
 			new FrameField("float", "sk_darkness"),
 			new FrameField("float", "sk_shadowRange"),
 			new FrameField("float", "sk_cloudHeight"),
-			new FrameField("float", "sk_effectDistance"),
+			new FrameField("float", "sk_hurtTime"),
+			new FrameField("float", "sk_gamma"),
+			new FrameField("float", "sk_aspectRatio"),
+			new FrameField("float", "sk_eyeSkyLightSmooth"),
+			new FrameField("float", "sk_eyeBlockLightSmooth"),
+			new FrameField("float", "sk_bossDarkening"),
+			new FrameField("int", "sk_playerFlags"),
 			new FrameField("int", "sk_dimension"),
 			new FrameField("int", "sk_cameraFluid"),
 			new FrameField("int", "sk_isHand"),
@@ -104,6 +118,16 @@ public final class Builtins {
 		PARTICLE,
 		SKY,
 		CLOUDS,
+		LINES,
+		TEXT,
+		BEACON,
+		PORTAL,
+		LIGHTNING,
+		GLINT,
+		WEATHER,
+		BREAKING,
+		WORLD_BORDER,
+		EYES,
 		SHADOW
 	}
 
@@ -123,7 +147,18 @@ public final class Builtins {
 
 	public enum Format {
 		RGBA8,
-		RGBA16F
+		RGBA16F,
+		RGBA32F
+	}
+
+	static final Set<Program> NO_TEXTURE = Set.of(Program.SKY, Program.CLOUDS, Program.LINES, Program.LIGHTNING);
+
+	public static Program fallback(Program program) {
+		return switch (program) {
+			case EYES -> Program.ENTITY;
+			case WEATHER -> Program.PARTICLE;
+			default -> null;
+		};
 	}
 
 	public enum Filter {
@@ -152,7 +187,9 @@ public final class Builtins {
 				new StructField("blockLight", "sk_blockLight", ShType.FLOAT, false),
 				new StructField("skyLight", "sk_skyLight", ShType.FLOAT, false),
 				new StructField("top", "sk_top", ShType.BOOL, false),
-				new StructField("isHand", "sk_isHand", ShType.BOOL, false)));
+				new StructField("isHand", "sk_isHand", ShType.BOOL, false),
+				new StructField("entity", "sk_entity", ShType.INT, false),
+				new StructField("item", "sk_item", ShType.INT, false)));
 		FRAGMENT.fields(List.of(
 				new StructField("albedo", "sk_albedo", ShType.VEC4, false),
 				new StructField("color", "sk_color", ShType.VEC4, false),
@@ -177,7 +214,10 @@ public final class Builtins {
 				new StructField("specular", "sk_specular", ShType.VEC3, false),
 				new StructField("emission", "sk_emission", ShType.VEC3, false),
 				new StructField("hasMaterial", "sk_hasMaterial", ShType.BOOL, false),
-				new StructField("unlit", "sk_unlit", ShType.BOOL, false)));
+				new StructField("unlit", "sk_unlit", ShType.BOOL, false),
+				new StructField("entity", "sk_entity", ShType.INT, false),
+				new StructField("item", "sk_item", ShType.INT, false),
+				new StructField("emissive", "sk_emissive", ShType.BOOL, false)));
 	}
 
 	static final Map<String, ShType> LIBRARY_TYPES = Map.of(
@@ -185,7 +225,10 @@ public final class Builtins {
 			"Vertex", new ShType.StructType(VERTEX),
 			"Fragment", new ShType.StructType(FRAGMENT));
 
-	static final Set<String> ANNOTATIONS = Set.of("Uniform", "Varying", "Texture", "Target", "Output", "Blocks", "Light", "LightFilter", "Vertex", "Fragment", "Pass");
+	static final Set<String> ANNOTATIONS = Set.of("Uniform", "Varying", "Texture", "Target", "Output", "Blocks", "Light", "LightFilter", "Vertex", "Fragment", "Pass",
+			"Option", "Entities", "Items", "Biomes", "Dimensions");
+
+	public static final List<String> FILE_VALUES = List.of("$biome", "$previousBiome", "$biomeBlend", "$heldItem", "$heldItemOffhand", "$dimension");
 
 	static final Map<String, Value> VALUES = new LinkedHashMap<>();
 	static final Map<String, List<Function>> FUNCTIONS = new HashMap<>();
@@ -228,13 +271,12 @@ public final class Builtins {
 		value("fogStart", ShType.FLOAT, "sk_fogStart");
 		value("fogEnd", ShType.FLOAT, "sk_fogEnd");
 		value("renderDistance", ShType.FLOAT, "sk_renderDistance");
-		value("effectDistance", ShType.FLOAT, "sk_effectDistance");
 		value("fov", ShType.FLOAT, "sk_fov");
 		value("near", ShType.FLOAT, "sk_near");
 		value("far", ShType.FLOAT, "sk_far");
 		value("eyeBlockLight", ShType.FLOAT, "sk_eyeBlockLight");
 		value("eyeSkyLight", ShType.FLOAT, "sk_eyeSkyLight");
-		value("dimension", ShType.INT, "sk_dimension");
+		value("dimension", ShType.INT, "(sk_file_dimension >= 0 ? sk_file_dimension : sk_dimension)");
 		value("isInWater", ShType.BOOL, "(sk_cameraFluid == 1)");
 		value("isInLava", ShType.BOOL, "(sk_cameraFluid == 2)");
 		value("isInPowderSnow", ShType.BOOL, "(sk_cameraFluid == 3)");
@@ -251,6 +293,30 @@ public final class Builtins {
 		value("taaOffset", ShType.VEC2, "sk_taaOffset");
 		value("shadowMatrix", ShType.MAT4, "sk_shadowMatrix");
 		value("shadowRange", ShType.FLOAT, "sk_shadowRange");
+		value("cameraVelocity", ShType.VEC3, "sk_cameraVelocity");
+		value("playerHealth", ShType.FLOAT, "sk_playerHealth");
+		value("playerHunger", ShType.FLOAT, "sk_playerHunger");
+		value("playerAir", ShType.FLOAT, "sk_playerAir");
+		value("hurtTime", ShType.FLOAT, "sk_hurtTime");
+		value("gamma", ShType.FLOAT, "sk_gamma");
+		value("aspectRatio", ShType.FLOAT, "sk_aspectRatio");
+		value("eyeSkyLightSmooth", ShType.FLOAT, "sk_eyeSkyLightSmooth");
+		value("eyeBlockLightSmooth", ShType.FLOAT, "sk_eyeBlockLightSmooth");
+		value("bossDarkening", ShType.FLOAT, "sk_bossDarkening");
+		value("lightningFlash", ShType.FLOAT, "sk_lightningFlash");
+		value("lightningPosition", ShType.VEC3, "sk_lightningPosition");
+		value("skyColor", ShType.VEC3, "sk_skyColor");
+		value("cloudColor", ShType.VEC3, "sk_cloudColor");
+		value("isSneaking", ShType.BOOL, "((sk_playerFlags & 1) != 0)");
+		value("isSprinting", ShType.BOOL, "((sk_playerFlags & 2) != 0)");
+		value("isGliding", ShType.BOOL, "((sk_playerFlags & 4) != 0)");
+		value("isRiding", ShType.BOOL, "((sk_playerFlags & 8) != 0)");
+		value("isSpectator", ShType.BOOL, "((sk_playerFlags & 16) != 0)");
+		value("biome", ShType.INT, "sk_file_biome");
+		value("previousBiome", ShType.INT, "sk_file_previousBiome");
+		value("biomeBlend", ShType.FLOAT, "sk_file_biomeBlend");
+		value("heldItem", ShType.INT, "sk_file_heldItem");
+		value("heldItemOffhand", ShType.INT, "sk_file_heldItemOffhand");
 		VALUES.put("SCREEN", new Value("SCREEN", ShType.TEXTURE, "SkScreen", PASS_ONLY, true));
 		VALUES.put("DEPTH", new Value("DEPTH", ShType.TEXTURE, "SkDepth", PASS_ONLY, true));
 		VALUES.put("SHADOW_MAP", new Value("SHADOW_MAP", ShType.TEXTURE, "SkShadow", NO_SHADOW, true));

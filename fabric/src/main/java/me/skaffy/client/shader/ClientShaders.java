@@ -24,9 +24,8 @@ import me.skaffy.protocol.shaders.ShadersPacket.Enable;
 import me.skaffy.protocol.shaders.ShadersPacket.ErrorKind;
 import me.skaffy.protocol.shaders.ShadersPacket.FileChunk;
 import me.skaffy.protocol.shaders.ShadersPacket.RemoveFile;
-import me.skaffy.protocol.shaders.ShadersPacket.SetShaderDistance;
+import me.skaffy.protocol.shaders.ShadersPacket.SetClientShaders;
 import me.skaffy.protocol.shaders.ShadersPacket.SetUniforms;
-import me.skaffy.protocol.shaders.ShadersPacket.SetVista;
 
 import net.minecraft.client.Minecraft;
 
@@ -62,8 +61,8 @@ public final class ClientShaders {
 
 		if (reserved != null) {
 			if (!(packet instanceof FileChunk chunk) || chunk.offset() == 0) {
-				report(reserved, ErrorKind.REQUEST, "Classes in skaffy. packages belong to the mod, a server can't send, remove, enable or disable "
-						+ reserved + (reserved.equals(ShadersCodec.VISTA) ? " (Vista is turned on and off with SetVista)" : ""));
+				report(reserved, ErrorKind.REQUEST, "Classes in skaffy. packages belong to the mod, a server can't send, remove, enable, disable or set "
+						+ reserved + " (the player's own shader can only be turned off, with SetClientShaders)");
 			}
 
 			return;
@@ -97,10 +96,8 @@ public final class ClientShaders {
 			});
 			case Disable disable -> minecraft.execute(() -> ShaderRenderer.disable(disable.className()));
 			case DisableAll ignored -> minecraft.execute(ShaderRenderer::disableAll);
-			case SetUniforms set when set.className().equals(ShadersCodec.VISTA) -> minecraft.execute(() -> Vista.serverUniforms(set.values(), set.durationMillis(), set.easing()));
 			case SetUniforms set -> minecraft.execute(() -> ShaderRenderer.setUniforms(set.className(), set.values(), set.durationMillis(), set.easing()));
-			case SetVista vista -> minecraft.execute(() -> Vista.serverEnabled(vista.enabled(), vista.locked()));
-			case SetShaderDistance distance -> minecraft.execute(() -> Vista.serverDistance(distance.chunks(), distance.locked()));
+			case SetClientShaders shaders -> minecraft.execute(() -> ShaderOptions.serverMode(shaders.mode()));
 			default -> {
 			}
 		}
@@ -112,6 +109,7 @@ public final class ClientShaders {
 			case RemoveFile remove -> remove.className();
 			case Enable enable -> enable.className();
 			case Disable disable -> disable.className();
+			case SetUniforms set -> set.className();
 			default -> null;
 		};
 
@@ -223,7 +221,7 @@ public final class ClientShaders {
 		}
 
 		queued.forEach(ClientShaders::send);
-		Minecraft.getInstance().execute(Vista::sessionStarted);
+		Minecraft.getInstance().execute(ShaderOptions::sessionStarted);
 	}
 
 	public static void unload() {
@@ -240,7 +238,7 @@ public final class ClientShaders {
 		WAITING.clear();
 		Minecraft.getInstance().execute(() -> {
 			ShaderRenderer.clear();
-			Vista.sessionEnded();
+			ShaderOptions.sessionEnded();
 		});
 	}
 
@@ -254,16 +252,16 @@ public final class ClientShaders {
 		send(new ShadersPacket.State(className, running));
 	}
 
-	static void sendVista(boolean enabled, int chunks, boolean byPlayer) {
+	static void sendClientState(boolean shaderOn, boolean byPlayer) {
 		if (SkaffyConnection.supports(ShadersCodec.FEATURE)) {
-			send(new ShadersPacket.VistaState(enabled, chunks, byPlayer));
+			send(new ShadersPacket.ClientShaderState(shaderOn, byPlayer));
 		}
 	}
 
 	private static void send(ShadersPacket packet) {
 		synchronized (LOCK) {
 			if (!ready) {
-				if (packet instanceof ShadersPacket.VistaState || packet instanceof ShadersPacket.Error error && ShadersCodec.isReserved(error.className())
+				if (packet instanceof ShadersPacket.ClientShaderState || packet instanceof ShadersPacket.Error error && ShadersCodec.isReserved(error.className())
 						|| packet instanceof ShadersPacket.State state && ShadersCodec.isReserved(state.className())) {
 					return;
 				}

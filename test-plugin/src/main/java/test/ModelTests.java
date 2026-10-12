@@ -21,6 +21,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Interaction;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Zombie;
 
 final class ModelTests {
 	private static final Map<String, EntityType> SPAWN_TYPES = Map.of("bighead", EntityType.ZOMBIE, "robot", EntityType.PIG, "crystal", EntityType.INTERACTION);
@@ -79,8 +80,12 @@ final class ModelTests {
 				at.setYaw(player.getLocation().getYaw() + 180);
 				Entity entity = player.getWorld().spawnEntity(at, SPAWN_TYPES.get(model.getName()));
 
-				if (flags.contains("baby") && entity instanceof Ageable ageable) {
-					ageable.setBaby();
+				if (flags.contains("baby")) {
+					if (entity instanceof Zombie zombie) {
+						zombie.setBaby(true);
+					} else if (entity instanceof Ageable ageable) {
+						ageable.setBaby();
+					}
 				}
 
 				if (entity instanceof Interaction interaction) {

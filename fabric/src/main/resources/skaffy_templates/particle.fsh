@@ -12,7 +12,6 @@ uniform sampler2D Sampler0;
 layout(location = 0) in vec4 skFog;
 layout(location = 1) in vec4 skColor;
 layout(location = 2) in vec4 skLightmap;
-
 layout(location = 3) in vec2 skUv;
 layout(location = 4) in vec3 skPosition;
 
@@ -21,7 +20,6 @@ layout(location = 0) out vec4 fragColor;
 #endif
 
 vec4 skFinish(vec4 color) {
-
     #ifdef OIT_ACCUMULATE
     color = sampleColorForAccumulation(color);
     vec4 fogColor = vec4(FogColor.rgb * color.a, FogColor.a);
@@ -33,11 +31,9 @@ vec4 skFinish(vec4 color) {
     #else
     return color;
     #endif
-
 }
 
 void main() {
-
     vec4 tex = texture(Sampler0, skUv);
     vec4 albedo = tex * skColor * ColorModulator;
     vec4 color = albedo * skLightmap;
@@ -70,6 +66,9 @@ void main() {
     f.sk_emission = vec3(0.0);
     f.sk_hasMaterial = false;
     f.sk_unlit = false;
+    f.sk_entity = 0;
+    f.sk_item = 0;
+    f.sk_emissive = false;
     vec4 result = sk_fragmentHook(f);
 
     #ifdef OIT_ALPHA_ONLY
@@ -77,5 +76,4 @@ void main() {
     #else
     fragColor = skFinish(result);
     #endif
-
 }

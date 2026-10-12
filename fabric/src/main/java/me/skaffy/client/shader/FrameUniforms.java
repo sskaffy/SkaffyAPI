@@ -51,6 +51,10 @@ final class FrameUniforms implements AutoCloseable {
 	private boolean written;
 	private int frameCounter;
 	private float wetness;
+	private float eyeSkySmooth = -1;
+	private float eyeBlockSmooth = -1;
+	private float lightningFlash;
+	private final Vector3f lightningPosition = new Vector3f();
 	private static java.lang.reflect.Field climateField;
 	private static java.lang.reflect.Method downfallMethod;
 
@@ -134,13 +138,14 @@ final class FrameUniforms implements AutoCloseable {
 		}
 
 		int fluid = camera.fogType == FogType.WATER ? 1 : camera.fogType == FogType.LAVA ? 2 : camera.fogType == FogType.POWDER_SNOW ? 3 : 0;
-		Extras extras = extras(minecraft, level, camera.blockPos, light, camera.pos, partialTick, rain, frameTime, state);
+		Extras extras = extras(minecraft, level, camera.blockPos, light, camera.pos, partialTick, rain, frameTime, state,
+				player(minecraft, level, state, sky, cameraPos, frameTime, partialTick, eyeSky, eyeBlock));
 		Vector4f fogColor = camera.fogData.color;
 		float renderDistance = minecraft.options.getEffectiveRenderDistance() * 16f;
 		Values values = new Values(view, projection, inverseView, inverseProjection, new Matrix4f(previousView), new Matrix4f(jitter).mul(previousProjection),
 				fogColor, cameraPos, time, forward, frameTime, sun, dayTime, moon, rain, light, thunder, new Vector3f(previousCamera), partialTick,
 				state.windowRenderState.width, state.windowRenderState.height, camera.fogData.environmentalStart, camera.fogData.environmentalEnd,
-				renderDistance, ShaderRenderer.effectDistance(), fov, 0.05f, camera.depthFar, eyeBlock, eyeSky, dimension, fluid, sky.moonPhase.index(), extras);
+				renderDistance, fov, 0.05f, camera.depthFar, eyeBlock, eyeSky, dimension, fluid, sky.moonPhase.index(), extras);
 
 		try (GpuBufferSlice.MappedView mapped = world.currentBuffer().map(false, true)) {
 			write(mapped.data(), values, 0, values.extras.shadow);
@@ -171,17 +176,76 @@ final class FrameUniforms implements AutoCloseable {
 	private record Values(Matrix4f view, Matrix4f projection, Matrix4f inverseView, Matrix4f inverseProjection, Matrix4f previousView,
 			Matrix4f previousProjection, Vector4f fogColor, Vector3f camera, float time, Vector3f forward, float frameTime, Vector3f sun,
 			float dayTime, Vector3f moon, float rain, Vector3f light, float thunder, Vector3f previousCamera, float partialTick, int width,
-			int height, float fogStart, float fogEnd, float renderDistance, float effectDistance, float fov, float near, float far, float eyeBlock, float eyeSky,
+			int height, float fogStart, float fogEnd, float renderDistance, float fov, float near, float far, float eyeBlock, float eyeSky,
 			int dimension, int fluid, int moonPhase, Extras extras) {
 	}
 
 	private record Extras(Matrix4f shadow, float shadowRange, float[] cascades, float[] shade, float[] lightColors, Vector3f lightOrigin, int lightRange, int lightColumns,
 			float atlasWidth, float atlasHeight, Vector3f heldColor, float held, float wetness, float temperature, float downfall, boolean snowing,
-			float nightVision, float darkness, float taaX, float taaY, int frameCounter, float cloudHeight, float[] cloudOffset, int cloudMode) {
+			float nightVision, float darkness, float taaX, float taaY, int frameCounter, float cloudHeight, float[] cloudOffset, int cloudMode, Player player) {
+	}
+
+	private record Player(Vector3f velocity, float health, float hunger, float air, float hurt, int flags, Vector3f skyColor, Vector3f cloudColor,
+			Vector3f lightningPosition, float lightningFlash, float gamma, float aspectRatio, float eyeSkySmooth, float eyeBlockSmooth, float bossDarkening) {
+	}
+
+	private Player player(Minecraft minecraft, ClientLevel level, GameRenderState state, SkyRenderState sky, Vector3f camera, float frameTime, float partialTick,
+			float eyeSky, float eyeBlock) {
+		Vector3f velocity = hasPrevious && frameTime > 0 ? new Vector3f(camera).sub(previousCamera).div(frameTime) : new Vector3f();
+
+		if (velocity.length() > 1000) {
+			velocity.zero();
+		}
+
+		float health = 1;
+		float hunger = 1;
+		float air = 1;
+		float hurt = 0;
+		int flags = 0;
+		LocalPlayer player = minecraft.player;
+
+		if (player != null) {
+			health = Math.clamp(player.getHealth() / Math.max(1, player.getMaxHealth()), 0, 1);
+			hunger = Math.clamp(player.getFoodData().getFoodLevel() / 20f, 0, 1);
+			air = Math.clamp(player.getAirSupply() / (float) Math.max(1, player.getMaxAirSupply()), 0, 1);
+			hurt = player.hurtDuration > 0 ? Math.clamp((player.hurtTime - partialTick) / player.hurtDuration, 0, 1) : 0;
+			flags = (player.isCrouching() ? 1 : 0) | (player.isSprinting() ? 2 : 0) | (player.isFallFlying() ? 4 : 0) | (player.isPassenger() ? 8 : 0)
+					| (player.isSpectator() ? 16 : 0);
+		}
+
+		Vector3f skyColor = sky.skyColor != null ? new Vector3f(sky.skyColor) : new Vector3f(0.47f, 0.65f, 1);
+		int cloud = state.levelRenderState.cloudColor;
+		Vector3f cloudColor = new Vector3f((cloud >> 16 & 255) / 255f, (cloud >> 8 & 255) / 255f, (cloud & 255) / 255f);
+		boolean bolt = false;
+		double nearest = Double.MAX_VALUE;
+
+		if (level != null) {
+			for (net.minecraft.world.entity.Entity entity : level.entitiesForRendering()) {
+				if (entity instanceof net.minecraft.world.entity.LightningBolt) {
+					double distance = entity.distanceToSqr(camera.x, camera.y, camera.z);
+					bolt = true;
+
+					if (distance < nearest) {
+						nearest = distance;
+						lightningPosition.set((float) entity.getX(), (float) entity.getY(), (float) entity.getZ());
+					}
+				}
+			}
+		}
+
+		lightningFlash = bolt && !minecraft.options.hideLightningFlash().get() ? 1 : Math.max(0, lightningFlash - frameTime * 4);
+		float fade = 1 - (float) Math.exp(-frameTime * 2);
+		eyeSkySmooth = eyeSkySmooth < 0 ? eyeSky : eyeSkySmooth + (eyeSky - eyeSkySmooth) * fade;
+		eyeBlockSmooth = eyeBlockSmooth < 0 ? eyeBlock : eyeBlockSmooth + (eyeBlock - eyeBlockSmooth) * fade;
+		float gamma = minecraft.options.gamma().get().floatValue();
+		float aspect = state.windowRenderState.height > 0 ? state.windowRenderState.width / (float) state.windowRenderState.height : 1;
+		float boss = minecraft.gameRenderer.bossOverlayWorldDarkening(partialTick);
+		return new Player(velocity, health, hunger, air, hurt, flags, skyColor, cloudColor, new Vector3f(lightningPosition), lightningFlash, gamma, aspect,
+				eyeSkySmooth, eyeBlockSmooth, boss);
 	}
 
 	private Extras extras(Minecraft minecraft, ClientLevel level, BlockPos eye, Vector3f light, net.minecraft.world.phys.Vec3 cameraPos, float partialTick,
-			float rain, float frameTime, GameRenderState state) {
+			float rain, float frameTime, GameRenderState state, Player playerValues) {
 		ShadowMap shadows = ShaderRenderer.shadowMap();
 		Matrix4f shadow = new Matrix4f();
 		float shadowRange = 0;
@@ -273,7 +337,7 @@ final class FrameUniforms implements AutoCloseable {
 		float[] cloudOffset = clouds != null ? clouds.offset(state) : new float[2];
 		return new Extras(shadow, shadowRange, cascades, shade, lightColors, lightOrigin, lightRange, lightColumns, atlasWidth, atlasHeight, heldColor, held,
 				wetness, temperature, downfall, snowing, nightVision, darkness, jitter.x(), jitter.y(), frameCounter++, state.levelRenderState.cloudHeight,
-				cloudOffset, cloudMode);
+				cloudOffset, cloudMode, playerValues);
 	}
 
 	private static float downfall(Biome biome, float fallback) {
@@ -323,7 +387,6 @@ final class FrameUniforms implements AutoCloseable {
 				case "sk_fogStart" -> buffer.putFloat(offset, v.fogStart);
 				case "sk_fogEnd" -> buffer.putFloat(offset, v.fogEnd);
 				case "sk_renderDistance" -> buffer.putFloat(offset, v.renderDistance);
-				case "sk_effectDistance" -> buffer.putFloat(offset, v.effectDistance);
 				case "sk_fov" -> buffer.putFloat(offset, v.fov);
 				case "sk_near" -> buffer.putFloat(offset, v.near);
 				case "sk_far" -> buffer.putFloat(offset, v.far);
@@ -362,6 +425,21 @@ final class FrameUniforms implements AutoCloseable {
 				case "sk_cloudHeight" -> buffer.putFloat(offset, v.extras.cloudHeight);
 				case "sk_cloudOffset" -> buffer.putFloat(offset, v.extras.cloudOffset[0]).putFloat(offset + 4, v.extras.cloudOffset[1]);
 				case "sk_cloudMode" -> buffer.putInt(offset, v.extras.cloudMode);
+				case "sk_cameraVelocity" -> v.extras.player.velocity.get(offset, buffer);
+				case "sk_playerHealth" -> buffer.putFloat(offset, v.extras.player.health);
+				case "sk_skyColor" -> v.extras.player.skyColor.get(offset, buffer);
+				case "sk_playerHunger" -> buffer.putFloat(offset, v.extras.player.hunger);
+				case "sk_cloudColor" -> v.extras.player.cloudColor.get(offset, buffer);
+				case "sk_playerAir" -> buffer.putFloat(offset, v.extras.player.air);
+				case "sk_lightningPosition" -> v.extras.player.lightningPosition.get(offset, buffer);
+				case "sk_lightningFlash" -> buffer.putFloat(offset, v.extras.player.lightningFlash);
+				case "sk_hurtTime" -> buffer.putFloat(offset, v.extras.player.hurt);
+				case "sk_gamma" -> buffer.putFloat(offset, v.extras.player.gamma);
+				case "sk_aspectRatio" -> buffer.putFloat(offset, v.extras.player.aspectRatio);
+				case "sk_eyeSkyLightSmooth" -> buffer.putFloat(offset, v.extras.player.eyeSkySmooth);
+				case "sk_eyeBlockLightSmooth" -> buffer.putFloat(offset, v.extras.player.eyeBlockSmooth);
+				case "sk_bossDarkening" -> buffer.putFloat(offset, v.extras.player.bossDarkening);
+				case "sk_playerFlags" -> buffer.putInt(offset, v.extras.player.flags);
 				default -> buffer.putInt(offset, 0);
 			}
 

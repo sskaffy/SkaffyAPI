@@ -19,6 +19,7 @@ import me.skaffy.client.gui.element.PictureElements.ItemElement;
 public final class GuiDocument {
 	public static final int MAX_ELEMENTS = 16384;
 	private static final double SCROLL_STEP = 24;
+	private static final float BUTTON_VOLUME = 0.25f;
 	private static final double DRAG_THRESHOLD = 3;
 
 	public final GuiPlatform platform;
@@ -778,7 +779,7 @@ public final class GuiDocument {
 		if (which == MouseButton.LEFT) {
 			for (Element element = target; element != null; element = element.parent) {
 				if (element instanceof ButtonElement button && button.sound != null && !button.disabled) {
-					platform.playSound(button.sound, 1, 1);
+					platform.playSound(button.sound, BUTTON_VOLUME, 1);
 					break;
 				}
 			}

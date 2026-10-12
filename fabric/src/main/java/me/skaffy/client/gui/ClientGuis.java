@@ -321,6 +321,42 @@ public final class ClientGuis {
 		created.show(method, args);
 	}
 
+	public static void openLocal(SfyClass cls, String method, Object[] args, net.minecraft.client.gui.screens.@Nullable Screen parent) {
+		SfyMethod gui = cls.findMethod(method, args.length);
+
+		if (gui == null || !gui.isGui()) {
+			throw new IllegalArgumentException(cls.qualifiedName() + " has no @Gui " + method);
+		}
+
+		if (session != null) {
+			session.close(CloseReason.REPLACED);
+		}
+
+		GuiSession created = new GuiSession(cls, false, 0, true, parent);
+		session = created;
+
+		if (!created.start()) {
+			session = null;
+			return;
+		}
+
+		created.show(gui, args);
+	}
+
+	public static boolean localOpen(String className) {
+		return session != null && session.local && session.className().equals(className) && !session.ended();
+	}
+
+	public static void closeLocal() {
+		if (session != null && session.local) {
+			session.close(CloseReason.CODE);
+		}
+	}
+
+	public static List<java.nio.file.Path> droppedFiles() {
+		return session != null && session.local ? session.dropped : List.of();
+	}
+
 	private static void call(Call call) {
 		GuiSession current = session != null && session.className().equals(call.className()) ? session : HUDS.get(call.className());
 

@@ -6,6 +6,14 @@ base {
 	archivesName = "skaffys-api-fabric"
 }
 
+loom {
+	runs {
+		named("client") {
+			programArguments.addAll("--username", providers.gradleProperty("dev_username").get())
+		}
+	}
+}
+
 dependencies {
 	minecraft("com.mojang:minecraft:${providers.gradleProperty("minecraft_version").get()}")
 	implementation("net.fabricmc:fabric-loader:${providers.gradleProperty("loader_version").get()}")

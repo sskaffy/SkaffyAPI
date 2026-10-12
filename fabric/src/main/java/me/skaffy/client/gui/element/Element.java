@@ -62,6 +62,10 @@ public class Element implements PropTarget {
 	public double scrollY;
 	double scrollTargetX;
 	double scrollTargetY;
+	double scrollSpeedX;
+	double scrollSpeedY;
+	static final double SCROLL_STIFFNESS = 300;
+	static final double SCROLL_DAMPING = 2 * Math.sqrt(SCROLL_STIFFNESS);
 	public Cursor cursor;
 	public RichText tooltip;
 	public Boolean mouseThrough;
@@ -468,6 +472,8 @@ public class Element implements PropTarget {
 		scrollTargetY = Math.clamp(y, 0, maxScrollY());
 		scrollX = scrollTargetX;
 		scrollY = scrollTargetY;
+		scrollSpeedX = 0;
+		scrollSpeedY = 0;
 	}
 
 	void scrollBy(double dx, double dy) {
@@ -478,16 +484,25 @@ public class Element implements PropTarget {
 	void smoothScroll(double seconds) {
 		scrollTargetX = Math.clamp(scrollTargetX, 0, maxScrollX());
 		scrollTargetY = Math.clamp(scrollTargetY, 0, maxScrollY());
-		double factor = 1 - Math.exp(-seconds * 18);
-		scrollX += (scrollTargetX - scrollX) * factor;
-		scrollY += (scrollTargetY - scrollY) * factor;
+		double left = Math.min(seconds, 0.1);
 
-		if (Math.abs(scrollTargetX - scrollX) < 0.05) {
-			scrollX = scrollTargetX;
+		while (left > 0) {
+			double step = Math.min(left, 1 / 240.0);
+			left -= step;
+			scrollSpeedX += ((scrollTargetX - scrollX) * SCROLL_STIFFNESS - scrollSpeedX * SCROLL_DAMPING) * step;
+			scrollSpeedY += ((scrollTargetY - scrollY) * SCROLL_STIFFNESS - scrollSpeedY * SCROLL_DAMPING) * step;
+			scrollX += scrollSpeedX * step;
+			scrollY += scrollSpeedY * step;
 		}
 
-		if (Math.abs(scrollTargetY - scrollY) < 0.05) {
+		if (Math.abs(scrollTargetX - scrollX) < 0.02 && Math.abs(scrollSpeedX) < 0.5) {
+			scrollX = scrollTargetX;
+			scrollSpeedX = 0;
+		}
+
+		if (Math.abs(scrollTargetY - scrollY) < 0.02 && Math.abs(scrollSpeedY) < 0.5) {
 			scrollY = scrollTargetY;
+			scrollSpeedY = 0;
 		}
 	}
 

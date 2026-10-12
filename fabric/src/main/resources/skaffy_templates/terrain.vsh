@@ -58,6 +58,8 @@ void main() {
     v.sk_skyLight = float(light.y) / 240.0;
     v.sk_top = top;
     v.sk_isHand = false;
+    v.sk_entity = 0;
+    v.sk_item = 0;
     sk_vertexHook(v);
 
     gl_Position = ProjMat * ModelViewMat * vec4(v.sk_position, 1.0);

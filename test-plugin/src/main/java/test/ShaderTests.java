@@ -36,7 +36,7 @@ final class ShaderTests implements Listener {
 			PRESETS.put(name.equals("DepthFog") ? "fog" : name.toLowerCase(Locale.ROOT), name);
 		}
 
-		PRESETS.put("vista", "");
+		PRESETS.put("extras", "Extras");
 		PRESETS.put("shadows", "ShadowDebug");
 		PRESETS.put("lights", "LightDebug");
 		PRESETS.put("buffers", "BufferDebug");
@@ -63,7 +63,7 @@ final class ShaderTests implements Listener {
 	}
 
 	private static String className(String preset) {
-		return preset.equals("vista") ? SkaffyShaders.VISTA : "skaffytest." + PRESETS.get(preset);
+		return "skaffytest." + PRESETS.get(preset);
 	}
 
 	boolean command(Player player, String[] args) {
@@ -84,10 +84,7 @@ final class ShaderTests implements Listener {
 
 		switch (action) {
 			case "off" -> {
-				if (args.length > 2 && args[2].equals("vista")) {
-					shaders.setVista(player, false);
-					player.sendMessage(Component.text("Turned off the built-in Vista for this session"));
-				} else if (args.length > 2 && PRESETS.containsKey(args[2])) {
+				if (args.length > 2 && PRESETS.containsKey(args[2])) {
 					shaders.disable(player, className(args[2]));
 					stopPulse(player, args[2]);
 					player.sendMessage(Component.text("Turned off " + args[2]));
@@ -109,8 +106,8 @@ final class ShaderTests implements Listener {
 			}
 			case "set", "animate" -> uniform(player, shaders, args, action.equals("animate"));
 			case "resend" -> {
-				if (args.length < 3 || !PRESETS.containsKey(args[2]) || args[2].equals("vista")) {
-					player.sendMessage(Component.text("/skaffytest shader resend <preset> (not vista: it's built into the mod)"));
+				if (args.length < 3 || !PRESETS.containsKey(args[2])) {
+					player.sendMessage(Component.text("/skaffytest shader resend <preset>"));
 					return true;
 				}
 
@@ -127,12 +124,6 @@ final class ShaderTests implements Listener {
 			default -> {
 				if (!PRESETS.containsKey(action)) {
 					player.sendMessage(Component.text("Unknown preset " + action, NamedTextColor.RED));
-					return true;
-				}
-
-				if (action.equals("vista")) {
-					shaders.setVista(player, true);
-					player.sendMessage(Component.text("Turned on the built-in Vista for this session (/skaffytest vista off turns it off)"));
 					return true;
 				}
 

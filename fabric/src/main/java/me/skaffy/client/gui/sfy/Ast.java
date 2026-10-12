@@ -53,7 +53,7 @@ final class Ast {
 		Pos pos();
 	}
 
-	record ClassDecl(String name, Modifiers modifiers, List<Member> members, Pos pos) {
+	record ClassDecl(String name, Modifiers modifiers, List<Member> members, Pos pos, String superName, Pos superPos) {
 	}
 
 	record Field(Modifiers modifiers, TypeRef type, String name, Expr init, Pos pos) implements Member {
@@ -138,7 +138,7 @@ final class Ast {
 	record Empty(Pos pos) implements Stmt {
 	}
 
-	sealed interface Expr permits Literal, Name, Select, Call, New, Unary, Binary, Assign, IncDec, Conditional, Cast, InstanceOf, Lambda, SwitchExpr, This {
+	sealed interface Expr permits Literal, Name, Select, Call, New, Unary, Binary, Assign, IncDec, Conditional, Cast, InstanceOf, Lambda, SwitchExpr, This, ClassLit {
 		Pos pos();
 	}
 
@@ -194,5 +194,8 @@ final class Ast {
 	}
 
 	record This(Pos pos) implements Expr {
+	}
+
+	record ClassLit(String name, Pos pos) implements Expr {
 	}
 }

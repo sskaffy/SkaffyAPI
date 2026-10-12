@@ -11,8 +11,9 @@ import me.skaffy.client.shader.lang.Builtins.Stage;
 import me.skaffy.client.shader.lang.Builtins.Wrap;
 
 public record ShaderModule(String className, List<Uniform> uniforms, int uniformBlockSize, List<TextureSource> textures, List<Target> targets,
-		List<Output> outputs, Map<Integer, List<String>> materials, List<Light> lights, List<Light> filters, List<Pass> passes, Map<Program, Hook> hooks,
-		Map<Program, Hook> shadowHooks, Settings settings, boolean usesShadows, boolean usesSolid, boolean usesLight, java.util.Set<String> dependencies) {
+		List<Output> outputs, Map<Integer, List<String>> materials, Map<String, Map<Integer, List<String>>> ids, List<Light> lights, List<Light> filters,
+		List<Pass> passes, Map<Program, Hook> hooks, Map<Program, Hook> shadowHooks, Settings settings, boolean usesShadows, boolean usesSolid,
+		boolean usesLight, List<Option> options, java.util.Set<String> dependencies) {
 	public record Setting(double value, String uniform) {
 	}
 
@@ -40,6 +41,33 @@ public record ShaderModule(String className, List<Uniform> uniforms, int uniform
 		}
 	}
 
+	public record Option(String key, String name, String description, String typeName, boolean constant, double[] defaults, double min, double max,
+			double step, List<Double> choices) {
+		public boolean isSwitch() {
+			return typeName.equals("bool");
+		}
+
+		public boolean isColor() {
+			return typeName.startsWith("vec");
+		}
+
+		public boolean fits(double[] value) {
+			if (value.length != defaults.length) {
+				return false;
+			}
+
+			if (isSwitch() || isColor()) {
+				return true;
+			}
+
+			if (typeName.equals("int") && value[0] != Math.rint(value[0])) {
+				return false;
+			}
+
+			return choices.isEmpty() ? value[0] >= min - 1e-9 && value[0] <= max + 1e-9 : choices.contains(value[0]);
+		}
+	}
+
 	public record TextureSource(String name, String sampler, String source, Filter filter, Wrap wrap) {
 	}
 
@@ -55,7 +83,7 @@ public record ShaderModule(String className, List<Uniform> uniforms, int uniform
 	public record LightGroup(List<String> blocks, int level, String levelFrom) {
 	}
 
-	public record Pass(String name, Stage stage, String output, Blend blend, String fragment, List<String> samplers) {
+	public record Pass(String name, Stage stage, String output, Blend blend, String fragment, List<String> samplers, String when, List<String> writes) {
 		public boolean reads(String sampler) {
 			return samplers.contains(sampler);
 		}

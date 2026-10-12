@@ -11,6 +11,8 @@ import me.skaffy.protocol.ProtocolException;
 import me.skaffy.protocol.gui.GuiCodec;
 import me.skaffy.protocol.io.PacketReader;
 import me.skaffy.protocol.io.PacketWriter;
+import me.skaffy.protocol.shaders.ShadersPacket.ClientShaderMode;
+import me.skaffy.protocol.shaders.ShadersPacket.ClientShaderState;
 import me.skaffy.protocol.shaders.ShadersPacket.Disable;
 import me.skaffy.protocol.shaders.ShadersPacket.DisableAll;
 import me.skaffy.protocol.shaders.ShadersPacket.Enable;
@@ -18,15 +20,13 @@ import me.skaffy.protocol.shaders.ShadersPacket.Error;
 import me.skaffy.protocol.shaders.ShadersPacket.ErrorKind;
 import me.skaffy.protocol.shaders.ShadersPacket.FileChunk;
 import me.skaffy.protocol.shaders.ShadersPacket.RemoveFile;
-import me.skaffy.protocol.shaders.ShadersPacket.SetShaderDistance;
+import me.skaffy.protocol.shaders.ShadersPacket.SetClientShaders;
 import me.skaffy.protocol.shaders.ShadersPacket.SetUniforms;
-import me.skaffy.protocol.shaders.ShadersPacket.SetVista;
 import me.skaffy.protocol.shaders.ShadersPacket.State;
-import me.skaffy.protocol.shaders.ShadersPacket.VistaState;
 
 public final class ShadersCodec {
 	public static final String FEATURE = "shaders";
-	public static final int VERSION = 1;
+	public static final int VERSION = 2;
 	public static final String CHANNEL = Protocol.featureChannel(FEATURE);
 
 	public static final int FILE_CHUNK = 0;
@@ -35,16 +35,11 @@ public final class ShadersCodec {
 	public static final int DISABLE = 3;
 	public static final int DISABLE_ALL = 4;
 	public static final int SET_UNIFORMS = 5;
-	public static final int SET_VISTA = 6;
-	public static final int SET_SHADER_DISTANCE = 7;
+	public static final int SET_CLIENT_SHADERS = 6;
 
 	public static final int ERROR = 0;
 	public static final int STATE = 1;
-	public static final int VISTA_STATE = 2;
-
-	public static final String VISTA = "skaffy.vista.Vista";
-	public static final int MIN_DISTANCE = 2;
-	public static final int MAX_DISTANCE = 32;
+	public static final int CLIENT_SHADER_STATE = 2;
 
 	public static final int MAX_FILE_SIZE = 512 * 1024;
 	public static final long MAX_TOTAL_SIZE = 8L * 1024 * 1024;
@@ -112,9 +107,8 @@ public final class ShadersCodec {
 					.writeByte(error.kind().ordinal())
 					.writeString(GuiCodec.truncate(error.message(), MAX_ERROR_LENGTH), MAX_ERROR_LENGTH);
 			case State state -> writer.writeVarInt(STATE).writeString(state.className(), MAX_CLASS_NAME).writeBoolean(state.running());
-			case SetVista vista -> writer.writeVarInt(SET_VISTA).writeByte(vista.enabled() == null ? 2 : vista.enabled() ? 1 : 0).writeBoolean(vista.locked());
-			case SetShaderDistance distance -> writer.writeVarInt(SET_SHADER_DISTANCE).writeVarInt(distance.chunks()).writeBoolean(distance.locked());
-			case VistaState vista -> writer.writeVarInt(VISTA_STATE).writeBoolean(vista.enabled()).writeVarInt(vista.chunks()).writeBoolean(vista.byPlayer());
+			case SetClientShaders shaders -> writer.writeVarInt(SET_CLIENT_SHADERS).writeByte(shaders.mode().ordinal());
+			case ClientShaderState state -> writer.writeVarInt(CLIENT_SHADER_STATE).writeBoolean(state.shaderOn()).writeBoolean(state.byPlayer());
 		}
 
 		return writer.toByteArray();
@@ -151,16 +145,7 @@ public final class ShadersCodec {
 			case DISABLE -> new Disable(reader.readString(MAX_CLASS_NAME));
 			case DISABLE_ALL -> new DisableAll();
 			case SET_UNIFORMS -> new SetUniforms(reader.readString(MAX_CLASS_NAME), readUniforms(reader), reader.readVarInt(), reader.readEnum(Easing.values(), "easing"));
-			case SET_VISTA -> {
-				int enabled = reader.readByte();
-
-				if (enabled < 0 || enabled > 2) {
-					throw new ProtocolException("Vista state must be 0 (off), 1 (on) or 2 (the player's choice), got " + enabled);
-				}
-
-				yield new SetVista(enabled == 2 ? null : enabled == 1, reader.readBoolean());
-			}
-			case SET_SHADER_DISTANCE -> new SetShaderDistance(reader.readVarInt(), reader.readBoolean());
+			case SET_CLIENT_SHADERS -> new SetClientShaders(reader.readEnum(ClientShaderMode.values(), "client shader mode"));
 			default -> throw new ProtocolException("Unknown clientbound shaders packet " + id);
 		};
 
@@ -174,7 +159,7 @@ public final class ShadersCodec {
 		ShadersPacket packet = switch (id) {
 			case ERROR -> new Error(reader.readString(MAX_CLASS_NAME), reader.readEnum(ErrorKind.values(), "error kind"), reader.readString(MAX_ERROR_LENGTH));
 			case STATE -> new State(reader.readString(MAX_CLASS_NAME), reader.readBoolean());
-			case VISTA_STATE -> new VistaState(reader.readBoolean(), reader.readVarInt(0, MAX_DISTANCE), reader.readBoolean());
+			case CLIENT_SHADER_STATE -> new ClientShaderState(reader.readBoolean(), reader.readBoolean());
 			default -> throw new ProtocolException("Unknown serverbound shaders packet " + id);
 		};
 

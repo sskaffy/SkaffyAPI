@@ -55,13 +55,16 @@ public sealed interface ShadersPacket {
 		}
 	}
 
-	record SetVista(Boolean enabled, boolean locked) implements ShadersPacket {
+	enum ClientShaderMode {
+		ALLOWED,
+		OFF,
+		FORCED_OFF
 	}
 
-	record SetShaderDistance(int chunks, boolean locked) implements ShadersPacket {
-		public SetShaderDistance {
-			if (chunks != 0 && (chunks < ShadersCodec.MIN_DISTANCE || chunks > ShadersCodec.MAX_DISTANCE)) {
-				throw new ProtocolException("Shader Distance must be 0 or " + ShadersCodec.MIN_DISTANCE + " to " + ShadersCodec.MAX_DISTANCE + " chunks, got " + chunks);
+	record SetClientShaders(ClientShaderMode mode) implements ShadersPacket {
+		public SetClientShaders {
+			if (mode == null) {
+				throw new ProtocolException("Missing client shader mode");
 			}
 		}
 	}
@@ -78,6 +81,6 @@ public sealed interface ShadersPacket {
 	record State(String className, boolean running) implements ShadersPacket {
 	}
 
-	record VistaState(boolean enabled, int chunks, boolean byPlayer) implements ShadersPacket {
+	record ClientShaderState(boolean shaderOn, boolean byPlayer) implements ShadersPacket {
 	}
 }

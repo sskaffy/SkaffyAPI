@@ -37,11 +37,21 @@ final class GuiSession {
 	private long logSecond;
 	private int logsThisSecond;
 
+	final boolean local;
+	final net.minecraft.client.gui.screens.@org.jspecify.annotations.Nullable Screen parent;
+	java.util.List<java.nio.file.Path> dropped = java.util.List.of();
+
 	GuiSession(SfyClass cls) {
-		this(cls, false, 0);
+		this(cls, false, 0, false, null);
 	}
 
 	GuiSession(SfyClass cls, boolean hud, int order) {
+		this(cls, hud, order, false, null);
+	}
+
+	GuiSession(SfyClass cls, boolean hud, int order, boolean local, net.minecraft.client.gui.screens.@org.jspecify.annotations.Nullable Screen parent) {
+		this.local = local;
+		this.parent = parent;
 		this.cls = cls;
 		this.hud = hud;
 		this.order = order;
@@ -111,7 +121,7 @@ final class GuiSession {
 			syncHudSize();
 		}
 
-		ClientGuis.send(hud ? new GuiPacket.HudShown(className(), methodName) : new GuiPacket.Opened(className(), methodName));
+		toServer(hud ? new GuiPacket.HudShown(className(), methodName) : new GuiPacket.Opened(className(), methodName));
 	}
 
 	Object invoke(SfyMethod target, Object[] args) {
@@ -183,7 +193,9 @@ final class GuiSession {
 	}
 
 	void reportRuntime(ScriptException e) {
-		if (allowReport()) {
+		if (local) {
+			me.skaffy.client.SkaffySAPIClient.LOGGER.error("[GUI {}] {}", className(), e.describe());
+		} else if (allowReport()) {
 			ClientGuis.report(className(), ErrorKind.RUNTIME, e.describe());
 		}
 	}
@@ -192,7 +204,7 @@ final class GuiSession {
 		SkaffySAPIClient.LOGGER.error("[GUI {}] Internal error while running the GUI", className(), e);
 
 		if (allowReport()) {
-			ClientGuis.send(new GuiPacket.Error(className(), ErrorKind.RUNTIME, "Internal error in Skaffy's API (please report it): " + e));
+			toServer(new GuiPacket.Error(className(), ErrorKind.RUNTIME, "Internal error in Skaffy's API (please report it): " + e));
 		}
 	}
 
@@ -242,7 +254,7 @@ final class GuiSession {
 			default -> SkaffySAPIClient.LOGGER.info("[GUI {}] {}", className(), message);
 		}
 
-		ClientGuis.send(new GuiPacket.Log(className(), logLevel, message));
+		toServer(new GuiPacket.Log(className(), logLevel, message));
 	}
 
 	void close(CloseReason reason) {
@@ -254,7 +266,7 @@ final class GuiSession {
 		document.reset();
 
 		if (hud) {
-			ClientGuis.send(new GuiPacket.HudHidden(className(), reason));
+			toServer(new GuiPacket.HudHidden(className(), reason));
 			ClientGuis.hudEnded(this);
 			return;
 		}
@@ -263,7 +275,7 @@ final class GuiSession {
 			screen.closeFromSession();
 		}
 
-		ClientGuis.send(new GuiPacket.Closed(className(), reason));
+		toServer(new GuiPacket.Closed(className(), reason));
 		ClientGuis.ended(this);
 	}
 
@@ -274,7 +286,7 @@ final class GuiSession {
 
 		ended = true;
 		document.reset();
-		ClientGuis.send(new GuiPacket.Closed(className(), CloseReason.REPLACED));
+		toServer(new GuiPacket.Closed(className(), CloseReason.REPLACED));
 		ClientGuis.ended(this);
 	}
 
@@ -293,5 +305,22 @@ final class GuiSession {
 
 	boolean ended() {
 		return ended;
+	}
+
+	private void toServer(GuiPacket packet) {
+		if (!local) {
+			ClientGuis.send(packet);
+		}
+	}
+
+	void filesDropped(java.util.List<java.nio.file.Path> files) {
+		dropped = java.util.List.copyOf(files);
+		SfyMethod method = cls.findMethod("filesDropped", 1);
+
+		if (method != null && method.isPublic()) {
+			java.util.List<Object> names = new java.util.ArrayList<>();
+			files.forEach(file -> names.add(file.getFileName().toString()));
+			run(() -> cls.invoke(instance, method, new Object[] {names}));
+		}
 	}
 }

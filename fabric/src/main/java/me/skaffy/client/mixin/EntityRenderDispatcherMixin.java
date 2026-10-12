@@ -74,15 +74,20 @@ public abstract class EntityRenderDispatcherMixin {
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/EntityRenderer;submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V"))
 	private void skaffy$nonLivingLookScale(EntityRenderer<?, ?> renderer, EntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState camera, Operation<Void> original) {
 		float scale = PlayerLookHooks.nonLivingScale(state);
+		int previous = me.skaffy.client.shader.EntityMaterials.beginEntity(state.entityType);
 
-		if (scale == 1) {
+		try {
+			if (scale == 1) {
+				original.call(renderer, state, poseStack, collector, camera);
+				return;
+			}
+
+			poseStack.pushPose();
+			poseStack.scale(scale, scale, scale);
 			original.call(renderer, state, poseStack, collector, camera);
-			return;
+			poseStack.popPose();
+		} finally {
+			me.skaffy.client.shader.EntityMaterials.endEntity(previous);
 		}
-
-		poseStack.pushPose();
-		poseStack.scale(scale, scale, scale);
-		original.call(renderer, state, poseStack, collector, camera);
-		poseStack.popPose();
 	}
 }

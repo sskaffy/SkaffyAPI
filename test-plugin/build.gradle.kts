@@ -21,4 +21,9 @@ dependencies {
 tasks.jar {
 	archiveFileName = "skaffy-test.jar"
 	destinationDirectory = rootProject.layout.projectDirectory.dir("paper/run/plugins")
+	entryCompression = ZipEntryCompression.STORED
+	from("models") {
+		include("*.zip", "CREDITS.md")
+		into("test-models")
+	}
 }

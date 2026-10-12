@@ -98,21 +98,23 @@ public final class ShaderRenderer {
 	private static boolean screenshotWaiting;
 	private static @Nullable Blank blank;
 
+	static final String CLIENT = "client:";
+
 	private static final class Entry {
 		final String className;
-		final boolean builtin;
-		final ShaderEffect.@Nullable Assets builtinAssets;
+		final boolean client;
+		final ShaderEffect.@Nullable Assets clientAssets;
 		int order;
 		@Nullable ShaderModule module;
 		@Nullable UniformValues values;
 		@Nullable ShaderEffect effect;
 		boolean running;
 
-		Entry(String className, int order, ShaderEffect.@Nullable Assets builtinAssets) {
+		Entry(String className, int order, ShaderEffect.@Nullable Assets clientAssets) {
 			this.className = className;
 			this.order = order;
-			this.builtin = builtinAssets != null;
-			this.builtinAssets = builtinAssets;
+			this.client = clientAssets != null;
+			this.clientAssets = clientAssets;
 		}
 	}
 
@@ -148,15 +150,41 @@ public final class ShaderRenderer {
 		resort();
 	}
 
-	static void enableBuiltin(String className, ShaderModule module, ShaderEffect.Assets assets) {
-		if (ENTRIES.containsKey(className)) {
+	static void enableClient(String key, int order, ShaderModule module, ShaderEffect.Assets assets) {
+		Entry entry = ENTRIES.get(key);
+
+		if (entry != null && entry.module == module && entry.order == order) {
 			return;
 		}
 
-		Entry entry = new Entry(className, Integer.MIN_VALUE, assets);
-		ENTRIES.put(className, entry);
+		if (entry != null) {
+			stop(entry);
+			entry.order = order;
+		} else {
+			entry = new Entry(key, order, assets);
+			ENTRIES.put(key, entry);
+		}
+
 		use(entry, module);
 		resort();
+	}
+
+	static List<String> clientKeys() {
+		return ENTRIES.values().stream().filter(entry -> entry.client).map(entry -> entry.className).toList();
+	}
+
+	static void report(String key, ErrorKind kind, String message) {
+		if (key.startsWith(CLIENT)) {
+			ShaderPacks.report(key.substring(CLIENT.length()), kind, message);
+		} else {
+			ClientShaders.report(key, kind, message);
+		}
+	}
+
+	private static void sendState(String key, boolean running) {
+		if (!key.startsWith(CLIENT)) {
+			ClientShaders.sendState(key, running);
+		}
 	}
 
 	static void resetUniforms(String className) {
@@ -178,7 +206,7 @@ public final class ShaderRenderer {
 
 	static void disableAll() {
 		for (Entry entry : List.copyOf(ENTRIES.values())) {
-			if (entry.builtin) {
+			if (entry.client) {
 				continue;
 			}
 
@@ -202,7 +230,7 @@ public final class ShaderRenderer {
 		Entry entry = ENTRIES.get(className);
 
 		if (entry == null) {
-			ClientShaders.report(className, ErrorKind.REQUEST, "Can't set uniforms of " + className + ": it isn't enabled");
+			report(className, ErrorKind.REQUEST, "Can't set uniforms of " + className + ": it isn't enabled");
 			return;
 		}
 
@@ -215,12 +243,12 @@ public final class ShaderRenderer {
 		}
 
 		if (entry.values == null) {
-			ClientShaders.report(entry.className, ErrorKind.REQUEST, "Can't set uniforms of " + entry.className + " yet: the file isn't loaded (not sent, or it has compile errors)");
+			report(entry.className, ErrorKind.REQUEST, "Can't set uniforms of " + entry.className + " yet: the file isn't loaded (not sent, or it has compile errors)");
 			return;
 		}
 
 		for (String problem : entry.values.set(values, duration, easing, Util.getMillis())) {
-			ClientShaders.report(entry.className, ErrorKind.REQUEST, problem);
+			report(entry.className, ErrorKind.REQUEST, problem);
 		}
 	}
 
@@ -256,7 +284,7 @@ public final class ShaderRenderer {
 
 		if (entry.running) {
 			entry.running = false;
-			ClientShaders.sendState(entry.className, false);
+			sendState(entry.className, false);
 		}
 
 		dirty = true;
@@ -285,7 +313,7 @@ public final class ShaderRenderer {
 				if (slots.size() < FrameLayout.MAX_OUTPUTS) {
 					slots.add(new FrameLayout.Slot(entry.className, output.sampler(), ShaderEffect.format(output.format())));
 				} else if (OVERFLOW_REPORTED.add(entry.className + "." + output.name())) {
-					ClientShaders.report(entry.className, ErrorKind.RUNTIME, "@Output " + output.name() + " is left out: enabled files can have "
+					report(entry.className, ErrorKind.RUNTIME, "@Output " + output.name() + " is left out: enabled files can have "
 							+ FrameLayout.MAX_OUTPUTS + " @Output fields together");
 				}
 			}
@@ -308,16 +336,16 @@ public final class ShaderRenderer {
 				entry.effect = null;
 			}
 
-			ShaderEffect effect = new ShaderEffect(entry.module, entry.values, wantedLayout);
+			ShaderEffect effect = new ShaderEffect(entry.className, entry.module, entry.values, wantedLayout);
 			entry.effect = effect;
 
 			try {
-				effect.start(entry.builtin ? entry.builtinAssets : ShaderEffect.Assets.of(assets));
+				effect.start(entry.client ? entry.clientAssets : ShaderEffect.Assets.of(assets));
 			} catch (RuntimeException e) {
 				SkaffySAPIClient.LOGGER.error("Starting shader {} failed", entry.className, e);
 				effect.close();
 				entry.effect = null;
-				ClientShaders.report(entry.className, ErrorKind.RUNTIME, "Couldn't start: " + e);
+				report(entry.className, ErrorKind.RUNTIME, "Couldn't start: " + e);
 			}
 		}
 
@@ -325,7 +353,7 @@ public final class ShaderRenderer {
 	}
 
 	static void clear() {
-		ENTRIES.values().forEach(entry -> entry.running &= entry.builtin);
+		ENTRIES.values().forEach(entry -> entry.running &= entry.client);
 		disableAll();
 		OVERFLOW_REPORTED.clear();
 		assets = null;
@@ -343,7 +371,7 @@ public final class ShaderRenderer {
 
 
 	public static void beginFrame() {
-		Vista.update();
+		ShaderPacks.update();
 
 		if (ENTRIES.isEmpty() && !dirty) {
 			if (frame != null) {
@@ -375,7 +403,7 @@ public final class ShaderRenderer {
 				dirty = true;
 
 				if (effect.status == ShaderEffect.Status.FAILED) {
-					ClientShaders.report(entry.className, ErrorKind.RUNTIME, effect.failure);
+					report(entry.className, ErrorKind.RUNTIME, effect.failure);
 					effect.close();
 					entry.effect = null;
 				}
@@ -392,7 +420,7 @@ public final class ShaderRenderer {
 
 			if (running != entry.running) {
 				entry.running = running;
-				ClientShaders.sendState(entry.className, running);
+				sendState(entry.className, running);
 			}
 
 			if (running) {
@@ -594,6 +622,10 @@ public final class ShaderRenderer {
 			coloredLight = null;
 		}
 
+		ShaderEffect entities = owners.get(Program.ENTITY);
+		ShaderEffect items = owners.get(Program.ITEM);
+		EntityMaterials.set(entities != null && items != null, entities != null ? entities.module.ids().get("Entities") : null,
+				items != null ? items.module.ids().get("Items") : null);
 		ShaderEffect terrain = owners.get(Program.TERRAIN);
 		Map<Integer, List<String>> materials = terrain == null ? null : terrain.module.materials();
 
@@ -610,7 +642,7 @@ public final class ShaderRenderer {
 	}
 
 	static float effectDistance() {
-		return Math.min(Vista.distance(), Minecraft.getInstance().options.getEffectiveRenderDistance()) * 16f;
+		return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16f;
 	}
 
 	public static void levelProjection(Matrix4f projection) {
@@ -682,6 +714,10 @@ public final class ShaderRenderer {
 
 	public static boolean needsConsistentDepth() {
 		return anyPasses;
+	}
+
+	public static boolean isDrawingHand() {
+		return drawingHand;
 	}
 
 	public static void drawingHand(boolean hand) {
@@ -953,7 +989,7 @@ public final class ShaderRenderer {
 		} catch (RuntimeException e) {
 			drawingShadow = null;
 			SkaffySAPIClient.LOGGER.error("Drawing the shadow map of {} failed", shadowOwner.className, e);
-			ClientShaders.report(shadowOwner.className, ErrorKind.RUNTIME, "Drawing the shadow map failed: " + e);
+			report(shadowOwner.className, ErrorKind.RUNTIME, "Drawing the shadow map failed: " + e);
 			Entry entry = ENTRIES.get(shadowOwner.className);
 
 			if (entry != null) {
@@ -1024,14 +1060,14 @@ public final class ShaderRenderer {
 				}
 			} catch (RuntimeException e) {
 				SkaffySAPIClient.LOGGER.error("Shader {} failed while drawing", entry.className, e);
-				ClientShaders.report(entry.className, ErrorKind.RUNTIME, "Failed while drawing: " + e);
+				report(entry.className, ErrorKind.RUNTIME, "Failed while drawing: " + e);
 				stop(entry);
 			}
 		}
 	}
 
 	private static void runPass(ShaderEffect effect, PassRuntime pass, Stage stage) {
-		if (pass.compiled == null) {
+		if (pass.compiled == null || pass.pass.when() != null && effect.values.value(pass.pass.when(), 1) == 0) {
 			return;
 		}
 
@@ -1109,7 +1145,13 @@ public final class ShaderRenderer {
 			samplers.put(sampler, how);
 		}
 
-		try (RenderPass renderPass = encoder.createRenderPass(() -> "Skaffy shader " + effect.className + "." + pass.pass.name(), output, Optional.empty())) {
+		RenderPassDescriptor.Builder descriptor = RenderPassDescriptor.builder(() -> "Skaffy shader " + effect.className + "." + pass.pass.name()).withColorAttachment(output);
+
+		for (String written : pass.pass.writes()) {
+			descriptor.withColorAttachment(effect.target(samplerOf(effect, written), width, height).view);
+		}
+
+		try (RenderPass renderPass = encoder.createRenderPass(descriptor.build())) {
 			renderPass.setPipeline(pass.compiled);
 			renderPass.setUniform("SkFrame", frame.world());
 			GpuBufferSlice uniforms = effect.uniforms();

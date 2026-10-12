@@ -113,6 +113,11 @@ public final class WorldPrograms {
 			return new Variant(pipeline, Program.SKY, "end_sky", 5);
 		}
 
+		if (pipeline == RenderPipelines.WEATHER || pipeline == RenderPipelines.OIT_WEATHER.depthBoundsPipeline()
+				|| pipeline == RenderPipelines.OIT_WEATHER.transmittancePipeline() || pipeline == RenderPipelines.OIT_WEATHER.accumulatePipeline()) {
+			return new Variant(pipeline, Program.WEATHER, "particle", 0);
+		}
+
 		Identifier vertex = pipeline.getShaders().get(ShaderType.VERTEX);
 		Identifier fragment = pipeline.getShaders().get(ShaderType.FRAGMENT);
 
@@ -124,13 +129,24 @@ public final class WorldPrograms {
 			return null;
 		}
 
+		java.util.Set<String> flags = pipeline.getShaderDefines().flags();
+
 		return switch (vertex.getPath()) {
 			case "core/terrain" -> new Variant(pipeline, Program.TERRAIN, "terrain", 0);
 			case "core/block" -> new Variant(pipeline, Program.BLOCK, "block", 0);
-			case "core/entity" -> new Variant(pipeline, Program.ENTITY, "entity", 0);
+			case "core/entity" -> new Variant(pipeline, flags.contains("EMISSIVE") ? Program.EYES : Program.ENTITY, "entity", 0);
 			case "core/item" -> new Variant(pipeline, Program.ITEM, "item", 0);
 			case "core/particle" -> new Variant(pipeline, Program.PARTICLE, "particle", 0);
 			case "core/clouds" -> new Variant(pipeline, Program.CLOUDS, "clouds", 0);
+			case "core/rendertype_lines" -> new Variant(pipeline, Program.LINES, "lines", 0);
+			case "core/rendertype_leash" -> new Variant(pipeline, Program.LINES, "leash", 0);
+			case "core/text" -> flags.contains("IS_GUI") ? null : new Variant(pipeline, Program.TEXT, "text", 0);
+			case "core/rendertype_beacon_beam" -> new Variant(pipeline, Program.BEACON, "beacon", 0);
+			case "core/rendertype_end_portal" -> new Variant(pipeline, Program.PORTAL, "end_portal", 0);
+			case "core/rendertype_lightning" -> new Variant(pipeline, Program.LIGHTNING, "lightning", 0);
+			case "core/glint" -> new Variant(pipeline, Program.GLINT, "glint", 0);
+			case "core/rendertype_crumbling" -> new Variant(pipeline, Program.BREAKING, "crumbling", 0);
+			case "core/world_border" -> new Variant(pipeline, Program.WORLD_BORDER, "world_border", 0);
 			default -> null;
 		};
 	}

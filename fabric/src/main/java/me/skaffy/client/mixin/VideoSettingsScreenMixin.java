@@ -5,12 +5,13 @@ import java.util.List;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 
-import me.skaffy.client.shader.Vista;
+import me.skaffy.client.shader.ShaderOptions;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.client.gui.screens.options.VideoSettingsScreen;
@@ -32,10 +33,10 @@ public abstract class VideoSettingsScreenMixin extends OptionsSubScreen {
 	}
 
 	@ModifyReturnValue(method = "displayOptions", at = @At("RETURN"))
-	private static OptionInstance<?>[] skaffy$vistaRow(OptionInstance<?>[] options) {
+	private static OptionInstance<?>[] skaffy$shaderRow(OptionInstance<?>[] options) {
 		List<OptionInstance<?>> list = new ArrayList<>(List.of(options));
 		int api = list.indexOf(Minecraft.getInstance().options.preferredGraphicsBackend());
-		list.addAll(api >= 0 ? api + 1 : list.size(), List.of(Vista.ENABLED, Vista.DISTANCE));
+		list.addAll(api >= 0 ? api + 1 : list.size(), List.of(ShaderOptions.SHADERS));
 		return list.toArray(OptionInstance[]::new);
 	}
 
@@ -45,14 +46,13 @@ public abstract class VideoSettingsScreenMixin extends OptionsSubScreen {
 			return;
 		}
 
-		boolean changed = skaffy$shownVersion != Vista.version();
-		skaffy$shownVersion = Vista.version();
-		skaffy$follow(Vista.ENABLED, Vista.enabledLocked(), changed);
-		skaffy$follow(Vista.DISTANCE, Vista.distanceLocked(), changed);
+		boolean changed = skaffy$shownVersion != ShaderOptions.version();
+		skaffy$shownVersion = ShaderOptions.version();
+		skaffy$follow(ShaderOptions.SHADERS, !ShaderOptions.shadersUsable(), changed, ShaderOptions.shadersTooltip());
 	}
 
 	@Unique
-	private void skaffy$follow(OptionInstance<?> option, boolean locked, boolean changed) {
+	private void skaffy$follow(OptionInstance<?> option, boolean locked, boolean changed, Tooltip tooltip) {
 		AbstractWidget widget = this.list.findOption(option);
 
 		if (widget == null) {
@@ -60,8 +60,7 @@ public abstract class VideoSettingsScreenMixin extends OptionsSubScreen {
 		}
 
 		if (changed) {
-			this.list.resetOption(option);
-			widget.setTooltip(option == Vista.ENABLED ? Vista.enabledTooltip() : Vista.distanceTooltip());
+			widget.setTooltip(tooltip);
 		}
 
 		widget.active = !locked;

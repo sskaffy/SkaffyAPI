@@ -9,11 +9,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 public interface SkaffyShaders {
-	String VISTA = "skaffy.vista.Vista";
-
-	int MIN_SHADER_DISTANCE = 2;
-	int MAX_SHADER_DISTANCE = 32;
-
 	void addFile(String className, String source);
 
 	List<String> addFiles(Plugin plugin, String folder);
@@ -56,27 +51,9 @@ public interface SkaffyShaders {
 
 	boolean isSupported(Player player);
 
-	default boolean setVista(Player player, boolean enabled) {
-		return setVista(player, enabled, false);
-	}
+	boolean setClientShaders(Player player, ClientShaderMode mode);
 
-	boolean setVista(Player player, Boolean enabled, boolean locked);
+	ClientShaderMode getClientShaderMode(Player player);
 
-	default boolean resetVista(Player player) {
-		return setVista(player, null, false);
-	}
-
-	Boolean isVistaOn(Player player);
-
-	default boolean setShaderDistance(Player player, int chunks) {
-		return setShaderDistance(player, chunks, false);
-	}
-
-	boolean setShaderDistance(Player player, int chunks, boolean locked);
-
-	default boolean resetShaderDistance(Player player) {
-		return setShaderDistance(player, 0, false);
-	}
-
-	int getShaderDistance(Player player);
+	Boolean isClientShaderOn(Player player);
 }

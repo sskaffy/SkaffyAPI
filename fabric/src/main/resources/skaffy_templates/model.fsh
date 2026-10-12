@@ -53,7 +53,6 @@ vec3 skModelMappedNormal(vec3 normal, vec2 uv, vec2 encoded) {
     mapped.xy = encoded * 2.0 - 1.0;
     mapped.z = sqrt(max(0.0, 1.0 - dot(mapped.xy, mapped.xy)));
     mapped.xy *= SkParams.w;
-
     vec3 result = normalize(tangent * scale * mapped.x - bitangent * scale * mapped.y + normal * mapped.z);
     return any(isnan(result)) ? normal : result;
 }
@@ -116,6 +115,9 @@ void main() {
     f.sk_emission = emission;
     f.sk_hasMaterial = hasMap;
     f.sk_unlit = SkParams.z > 0.5;
+    f.sk_entity = 0;
+    f.sk_item = 0;
+    f.sk_emissive = false;
 
     vec4 result = sk_fragmentHook(f);
 
