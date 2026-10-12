@@ -78,3 +78,7 @@ The first server start imports the test models, which takes about 20 seconds; la
 Skaffy's API uses its own license; read [LICENSE](LICENSE) for the details. In short: the mod may be used on any server, in videos and in modpacks (unmodified, free, linking back here), but not sold, reuploaded or redistributed modified. The server plugin may be forked, modified and shared for free with credit. `.sfy` files belong to whoever wrote them. Plugins that use the API are their authors' own.
 
 The models in `test-models` keep their authors' licenses (see [CREDITS.md](test-models/CREDITS.md)).
+
+#
+
+IMPORTANT:The mod is coded by Claude but it is looked through by me and the logic behind things are on me too
